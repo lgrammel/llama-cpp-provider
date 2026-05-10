@@ -154,7 +154,9 @@ export function generate(
       } else if (result) {
         if (result.finishReason === "error") {
           reject(
-            new Error(result.errorMessage ?? "Failed to generate: unknown error")
+            new Error(
+              result.errorMessage ?? "Failed to generate: unknown error"
+            )
           );
         } else {
           resolve(result);
