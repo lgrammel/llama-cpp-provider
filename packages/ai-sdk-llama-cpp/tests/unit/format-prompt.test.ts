@@ -120,9 +120,7 @@ describe("convertMessages", () => {
 
       const result = convertMessages(messages);
 
-      expect(result).toEqual([
-        { role: "assistant", content: "Final answer." },
-      ]);
+      expect(result).toEqual([{ role: "assistant", content: "Final answer." }]);
     });
   });
 

@@ -254,7 +254,10 @@ function createReasoningTokenProcessor(
           continue;
         }
 
-        const suffixLength = getReasoningSuffixLength(buffer, reasoning.opening);
+        const suffixLength = getReasoningSuffixLength(
+          buffer,
+          reasoning.opening
+        );
         const emitLength = buffer.length - suffixLength;
         if (emitLength === 0) {
           return;
