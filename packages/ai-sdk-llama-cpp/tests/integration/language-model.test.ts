@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import type { LanguageModelV3Message } from "@ai-sdk/provider";
+import type { LanguageModelV4Message } from "@ai-sdk/provider";
 
 // Mock the native binding module before importing the language model
 vi.mock("../../src/native-binding.js", () => ({
@@ -49,14 +49,14 @@ describe("LlamaCppLanguageModel Integration", () => {
   });
 
   describe("doGenerate", () => {
-    const testMessages: LanguageModelV3Message[] = [
+    const testMessages: LanguageModelV4Message[] = [
       {
         role: "user",
         content: [{ type: "text", text: "Hello, how are you?" }],
       },
     ];
 
-    it("returns valid LanguageModelV3GenerateResult structure", async () => {
+    it("returns valid LanguageModelV4GenerateResult structure", async () => {
       const result = await model.doGenerate({
         prompt: testMessages,
         maxOutputTokens: 100,
@@ -239,7 +239,7 @@ describe("LlamaCppLanguageModel Integration", () => {
   });
 
   describe("doStream", () => {
-    const testMessages: LanguageModelV3Message[] = [
+    const testMessages: LanguageModelV4Message[] = [
       {
         role: "user",
         content: [{ type: "text", text: "Count to 3" }],
@@ -447,7 +447,7 @@ describe("LlamaCppLanguageModel Integration", () => {
     });
 
     it("reuses loaded model on subsequent calls", async () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         { role: "user", content: [{ type: "text", text: "test" }] },
       ];
 
@@ -587,7 +587,7 @@ describe("LlamaCppLanguageModel Integration", () => {
   });
 
   describe("doGenerate with tools", () => {
-    const testMessages: LanguageModelV3Message[] = [
+    const testMessages: LanguageModelV4Message[] = [
       {
         role: "user",
         content: [{ type: "text", text: "What is the weather in Tokyo?" }],
@@ -706,7 +706,7 @@ describe("LlamaCppLanguageModel Integration", () => {
   });
 
   describe("doStream with tools", () => {
-    const testMessages: LanguageModelV3Message[] = [
+    const testMessages: LanguageModelV4Message[] = [
       {
         role: "user",
         content: [{ type: "text", text: "What is the weather?" }],

@@ -44,13 +44,13 @@ describe("llamaCpp", () => {
     });
   });
 
-  describe("LanguageModelV3 interface", () => {
-    it('has specificationVersion "v3"', () => {
+  describe("LanguageModelV4 interface", () => {
+    it('has specificationVersion "v4"', () => {
       const model = llamaCpp({
         modelPath: "/path/to/model.gguf",
       });
 
-      expect(model.specificationVersion).toBe("v3");
+      expect(model.specificationVersion).toBe("v4");
     });
 
     it('has provider "llama.cpp"', () => {
@@ -94,13 +94,13 @@ describe("llamaCpp", () => {
     });
   });
 
-  describe("EmbeddingModelV3 interface", () => {
-    it('has specificationVersion "v3"', () => {
+  describe("EmbeddingModelV4 interface", () => {
+    it('has specificationVersion "v4"', () => {
       const model = llamaCpp.embedding({
         modelPath: "/path/to/model.gguf",
       });
 
-      expect(model.specificationVersion).toBe("v3");
+      expect(model.specificationVersion).toBe("v4");
     });
 
     it('has provider "llama.cpp"', () => {

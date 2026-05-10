@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { convertMessages } from "../../src/llama-cpp-language-model.js";
-import type { LanguageModelV3Message } from "@ai-sdk/provider";
+import type { LanguageModelV4Message } from "@ai-sdk/provider";
 
 describe("convertMessages", () => {
   describe("system messages", () => {
     it("converts system message to role/content format", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         { role: "system", content: "You are a helpful assistant." },
       ];
 
@@ -19,7 +19,7 @@ describe("convertMessages", () => {
 
   describe("user messages", () => {
     it("converts user message with text content", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         {
           role: "user",
           content: [{ type: "text", text: "Hello, how are you?" }],
@@ -34,7 +34,7 @@ describe("convertMessages", () => {
     });
 
     it("concatenates multiple text parts in user message", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         {
           role: "user",
           content: [
@@ -52,7 +52,7 @@ describe("convertMessages", () => {
     });
 
     it("ignores non-text parts in user message", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         {
           role: "user",
           content: [
@@ -75,7 +75,7 @@ describe("convertMessages", () => {
 
   describe("assistant messages", () => {
     it("converts assistant message to role/content format", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         {
           role: "assistant",
           content: [{ type: "text", text: "I am doing well, thank you!" }],
@@ -90,7 +90,7 @@ describe("convertMessages", () => {
     });
 
     it("concatenates multiple text parts in assistant message", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         {
           role: "assistant",
           content: [
@@ -108,7 +108,7 @@ describe("convertMessages", () => {
     });
 
     it("does not include assistant reasoning in conversation history", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         {
           role: "assistant",
           content: [
@@ -128,7 +128,7 @@ describe("convertMessages", () => {
 
   describe("reasoning prompt prefix", () => {
     it("adds the prefix to the first system message", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         { role: "system", content: "You are helpful." },
         { role: "user", content: [{ type: "text", text: "Hi" }] },
       ];
@@ -144,7 +144,7 @@ describe("convertMessages", () => {
     });
 
     it("adds a system message when no system message exists", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         { role: "user", content: [{ type: "text", text: "Hi" }] },
       ];
 
@@ -161,7 +161,7 @@ describe("convertMessages", () => {
 
   describe("tool messages", () => {
     it("converts tool result message to user message format", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         {
           role: "tool",
           content: [
@@ -191,7 +191,7 @@ describe("convertMessages", () => {
     });
 
     it("handles text output from tool result", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         {
           role: "tool",
           content: [
@@ -220,7 +220,7 @@ describe("convertMessages", () => {
     });
 
     it("handles error output from tool result", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         {
           role: "tool",
           content: [
@@ -249,7 +249,7 @@ describe("convertMessages", () => {
     });
 
     it("handles execution-denied output from tool result", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         {
           role: "tool",
           content: [
@@ -280,7 +280,7 @@ describe("convertMessages", () => {
 
   describe("multi-turn conversations", () => {
     it("converts a complete conversation with system, user, and assistant", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         { role: "system", content: "You are helpful." },
         { role: "user", content: [{ type: "text", text: "Hi!" }] },
         {
@@ -304,7 +304,7 @@ describe("convertMessages", () => {
     });
 
     it("handles multiple user-assistant exchanges", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         { role: "user", content: [{ type: "text", text: "Question 1" }] },
         { role: "assistant", content: [{ type: "text", text: "Answer 1" }] },
         { role: "user", content: [{ type: "text", text: "Question 2" }] },
@@ -325,7 +325,7 @@ describe("convertMessages", () => {
 
   describe("edge cases", () => {
     it("handles empty messages array", () => {
-      const messages: LanguageModelV3Message[] = [];
+      const messages: LanguageModelV4Message[] = [];
 
       const result = convertMessages(messages);
 
@@ -333,7 +333,7 @@ describe("convertMessages", () => {
     });
 
     it("handles empty text content", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         { role: "user", content: [{ type: "text", text: "" }] },
       ];
 
@@ -343,7 +343,7 @@ describe("convertMessages", () => {
     });
 
     it("preserves newlines in content", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         {
           role: "user",
           content: [{ type: "text", text: "Line 1\nLine 2\nLine 3" }],
@@ -358,7 +358,7 @@ describe("convertMessages", () => {
     });
 
     it("preserves special characters in content", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         {
           role: "user",
           content: [{ type: "text", text: "Special chars: <>&\"'`${}[]" }],

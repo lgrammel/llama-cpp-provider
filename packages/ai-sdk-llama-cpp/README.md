@@ -4,7 +4,7 @@
 
 > **macOS Only** - This package currently only supports macOS with Apple Silicon or Intel processors.
 
-A minimal [llama.cpp](https://github.com/ggerganov/llama.cpp) provider for the [Vercel AI SDK](https://sdk.vercel.ai/), implementing the `LanguageModelV3` interface.
+A minimal [llama.cpp](https://github.com/ggerganov/llama.cpp) provider for the [Vercel AI SDK](https://sdk.vercel.ai/), implementing the `LanguageModelV4` interface.
 
 This package loads llama.cpp directly into Node.js memory via native C++ bindings, enabling local LLM inference without requiring an external server.
 
@@ -352,7 +352,7 @@ Creates a new llama.cpp language model instance.
 
 ### `LlamaCppLanguageModel`
 
-Implements the `LanguageModelV3` interface from `@ai-sdk/provider`.
+Implements the `LanguageModelV4` interface from `@ai-sdk/provider`.
 
 **Methods:**
 

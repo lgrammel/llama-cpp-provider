@@ -4,7 +4,7 @@ This file provides guidance for AI coding agents (Cursor, Copilot, Claude Code) 
 
 ## Project Overview
 
-**ai-sdk-llama-cpp** is a llama.cpp provider for the Vercel AI SDK, implementing the `LanguageModelV3` interface. It loads llama.cpp directly into Node.js memory via native C++ bindings for local LLM inference.
+**ai-sdk-llama-cpp** is a llama.cpp provider for the Vercel AI SDK, implementing the `LanguageModelV4` interface. It loads llama.cpp directly into Node.js memory via native C++ bindings for local LLM inference.
 
 **Platform Support**: macOS only (Apple Silicon or Intel)
 
@@ -73,7 +73,7 @@ The `pnpm install` step automatically:
 │       ├── src/                # TypeScript source code
 │       │   ├── index.ts        # Public exports
 │       │   ├── llama-cpp-provider.ts    # Provider factory function
-│       │   ├── llama-cpp-language-model.ts  # LanguageModelV3 implementation
+│       │   ├── llama-cpp-language-model.ts  # LanguageModelV4 implementation
 │       │   ├── native-binding.ts   # Native module bindings
 │       │   └── json-schema-to-grammar.ts   # JSON schema to GBNF grammar converter
 │       ├── native/             # C++ native bindings
@@ -246,8 +246,8 @@ try {
 | File | Purpose |
 |------|---------|
 | `llama-cpp-provider.ts` | Factory function `llamaCpp()` - creates model instances, handles config |
-| `llama-cpp-language-model.ts` | `LanguageModelV3` implementation - `doGenerate()`, `doStream()`, tool call handling |
-| `llama-cpp-embedding-model.ts` | `EmbeddingModelV1` implementation for embeddings |
+| `llama-cpp-language-model.ts` | `LanguageModelV4` implementation - `doGenerate()`, `doStream()`, tool call handling |
+| `llama-cpp-embedding-model.ts` | `EmbeddingModelV4` implementation for embeddings |
 | `native-binding.ts` | TypeScript bindings to the native C++ addon |
 | `json-schema-to-grammar.ts` | Converts JSON Schema to GBNF grammar for structured output |
 | `index.ts` | Public exports |

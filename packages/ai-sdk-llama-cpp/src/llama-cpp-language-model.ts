@@ -1,15 +1,15 @@
 import type {
-  LanguageModelV3,
-  LanguageModelV3CallOptions,
-  LanguageModelV3Content,
-  LanguageModelV3FinishReason,
-  LanguageModelV3FunctionTool,
-  LanguageModelV3GenerateResult,
-  LanguageModelV3Message,
-  LanguageModelV3StreamPart,
-  LanguageModelV3StreamResult,
-  LanguageModelV3Usage,
-  SharedV3Warning,
+  LanguageModelV4,
+  LanguageModelV4CallOptions,
+  LanguageModelV4Content,
+  LanguageModelV4FinishReason,
+  LanguageModelV4FunctionTool,
+  LanguageModelV4GenerateResult,
+  LanguageModelV4Message,
+  LanguageModelV4StreamPart,
+  LanguageModelV4StreamResult,
+  LanguageModelV4Usage,
+  SharedV4Warning,
 } from "@ai-sdk/provider";
 
 import {
@@ -184,7 +184,7 @@ export function splitReasoningContent(
 }
 
 function appendParsedContent(
-  content: LanguageModelV3Content[],
+  content: LanguageModelV4Content[],
   parts: ParsedReasoningPart[],
   options: { includeText: boolean } = { includeText: true }
 ): void {
@@ -314,8 +314,8 @@ function createReasoningTokenProcessor(
 
 export function convertFinishReason(
   reason: string
-): LanguageModelV3FinishReason {
-  let unified: LanguageModelV3FinishReason["unified"];
+): LanguageModelV4FinishReason {
+  let unified: LanguageModelV4FinishReason["unified"];
   switch (reason) {
     case "stop":
       unified = "stop";
@@ -332,7 +332,7 @@ export function convertFinishReason(
 export function convertUsage(
   promptTokens: number,
   completionTokens: number
-): LanguageModelV3Usage {
+): LanguageModelV4Usage {
   return {
     inputTokens: {
       total: promptTokens,
@@ -362,7 +362,7 @@ export interface ParsedToolCall {
  * This grammar constrains the model to produce valid JSON tool calls.
  */
 export function generateToolCallGrammar(
-  tools: LanguageModelV3FunctionTool[]
+  tools: LanguageModelV4FunctionTool[]
 ): string {
   // Create a grammar that allows the model to output a tool call
   // Format: {"tool_calls":[{"id":"...","name":"...","arguments":{...}}]}
@@ -516,7 +516,7 @@ function generateToolCallId(): string {
  * Build a system prompt that instructs the model to use tools.
  */
 export function buildToolSystemPrompt(
-  tools: LanguageModelV3FunctionTool[]
+  tools: LanguageModelV4FunctionTool[]
 ): string {
   const toolDescriptions = tools
     .map((tool) => {
@@ -547,8 +547,8 @@ Rules:
  * The native layer will apply the appropriate chat template.
  */
 export function convertMessages(
-  messages: LanguageModelV3Message[],
-  tools?: LanguageModelV3FunctionTool[],
+  messages: LanguageModelV4Message[],
+  tools?: LanguageModelV4FunctionTool[],
   reasoning?: Pick<ResolvedReasoningConfig, "promptPrefix">
 ): ChatMessage[] {
   const result: ChatMessage[] = [];
@@ -664,10 +664,8 @@ export function convertMessages(
                 .map((item) => {
                   if (item.type === "text") {
                     return item.text;
-                  } else if (item.type === "file-data") {
+                  } else if (item.type === "file") {
                     return `[File: ${item.mediaType}]`;
-                  } else if (item.type === "file-url") {
-                    return `[File URL: ${item.url}]`;
                   } else {
                     return `[Unknown content type]`;
                   }
@@ -695,8 +693,8 @@ export function convertMessages(
   return result;
 }
 
-export class LlamaCppLanguageModel implements LanguageModelV3 {
-  readonly specificationVersion = "v3" as const;
+export class LlamaCppLanguageModel implements LanguageModelV4 {
+  readonly specificationVersion = "v4" as const;
   readonly provider = "llama.cpp";
   readonly modelId: string;
 
@@ -757,15 +755,15 @@ export class LlamaCppLanguageModel implements LanguageModelV3 {
   }
 
   async doGenerate(
-    options: LanguageModelV3CallOptions
-  ): Promise<LanguageModelV3GenerateResult> {
+    options: LanguageModelV4CallOptions
+  ): Promise<LanguageModelV4GenerateResult> {
     const handle = await this.ensureModelLoaded();
     const reasoningConfig = resolveReasoningConfig(this.config.reasoning);
 
     // Extract function tools from the tools array
     const functionTools =
       options.tools?.filter(
-        (t): t is LanguageModelV3FunctionTool => t.type === "function"
+        (t): t is LanguageModelV4FunctionTool => t.type === "function"
       ) ?? [];
 
     const hasTools = functionTools.length > 0;
@@ -806,8 +804,8 @@ export class LlamaCppLanguageModel implements LanguageModelV3 {
       : [{ type: "text" as const, text: result.text }];
     const visibleText = getVisibleText(parsedContent);
 
-    const warnings: SharedV3Warning[] = [];
-    const content: LanguageModelV3Content[] = [];
+    const warnings: SharedV4Warning[] = [];
+    const content: LanguageModelV4Content[] = [];
     let finishReason = convertFinishReason(result.finishReason);
 
     // Try to parse tool calls if tools were provided
@@ -853,15 +851,15 @@ export class LlamaCppLanguageModel implements LanguageModelV3 {
   }
 
   async doStream(
-    options: LanguageModelV3CallOptions
-  ): Promise<LanguageModelV3StreamResult> {
+    options: LanguageModelV4CallOptions
+  ): Promise<LanguageModelV4StreamResult> {
     const handle = await this.ensureModelLoaded();
     const reasoningConfig = resolveReasoningConfig(this.config.reasoning);
 
     // Extract function tools from the tools array
     const functionTools =
       options.tools?.filter(
-        (t): t is LanguageModelV3FunctionTool => t.type === "function"
+        (t): t is LanguageModelV4FunctionTool => t.type === "function"
       ) ?? [];
 
     const hasTools = functionTools.length > 0;
@@ -898,7 +896,7 @@ export class LlamaCppLanguageModel implements LanguageModelV3 {
 
     const textId = crypto.randomUUID();
 
-    const stream = new ReadableStream<LanguageModelV3StreamPart>({
+    const stream = new ReadableStream<LanguageModelV4StreamPart>({
       start: async (controller) => {
         try {
           // Emit stream start

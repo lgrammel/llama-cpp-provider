@@ -1,7 +1,7 @@
 {
   "name": "ai-sdk-llama-cpp",
   "version": "0.7.1",
-  "description": "A minimal llama.cpp provider for the Vercel AI SDK implementing LanguageModelV3 and EmbeddingModelV3",
+  "description": "A minimal llama.cpp provider for the Vercel AI SDK implementing LanguageModelV4 and EmbeddingModelV4",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -60,7 +60,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@ai-sdk/provider": "^3.0.0",
+    "@ai-sdk/provider": "4.0.0-canary.16",
     "cmake-js": "^7.3.0",
     "node-addon-api": "^8.0.0"
   },

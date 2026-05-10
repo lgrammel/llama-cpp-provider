@@ -1,8 +1,8 @@
 import type {
-  EmbeddingModelV3,
-  EmbeddingModelV3CallOptions,
-  EmbeddingModelV3Result,
-  SharedV3Warning,
+  EmbeddingModelV4,
+  EmbeddingModelV4CallOptions,
+  EmbeddingModelV4Result,
+  SharedV4Warning,
 } from "@ai-sdk/provider";
 
 import {
@@ -15,8 +15,8 @@ import {
 } from "./native-binding.js";
 import type { LlamaCppProviderConfig } from "./llama-cpp-provider.js";
 
-export class LlamaCppEmbeddingModel implements EmbeddingModelV3 {
-  readonly specificationVersion = "v3" as const;
+export class LlamaCppEmbeddingModel implements EmbeddingModelV4 {
+  readonly specificationVersion = "v4" as const;
   readonly provider = "llama.cpp";
   readonly modelId: string;
 
@@ -87,8 +87,8 @@ export class LlamaCppEmbeddingModel implements EmbeddingModelV3 {
   }
 
   async doEmbed(
-    options: EmbeddingModelV3CallOptions
-  ): Promise<EmbeddingModelV3Result> {
+    options: EmbeddingModelV4CallOptions
+  ): Promise<EmbeddingModelV4Result> {
     const handle = await this.ensureModelLoaded();
 
     const embedOptions: EmbedOptions = {
@@ -102,7 +102,7 @@ export class LlamaCppEmbeddingModel implements EmbeddingModelV3 {
       Array.from(embedding)
     );
 
-    const warnings: SharedV3Warning[] = [];
+    const warnings: SharedV4Warning[] = [];
 
     return {
       embeddings,

@@ -6,14 +6,14 @@ import {
   convertMessages,
 } from "../../src/llama-cpp-language-model.js";
 import type {
-  LanguageModelV3FunctionTool,
-  LanguageModelV3Message,
+  LanguageModelV4FunctionTool,
+  LanguageModelV4Message,
 } from "@ai-sdk/provider";
 
 describe("Tool Calling", () => {
   describe("generateToolCallGrammar", () => {
     it("generates grammar for a single tool with simple parameters", () => {
-      const tools: LanguageModelV3FunctionTool[] = [
+      const tools: LanguageModelV4FunctionTool[] = [
         {
           type: "function",
           name: "get_weather",
@@ -39,7 +39,7 @@ describe("Tool Calling", () => {
     });
 
     it("generates grammar for multiple tools", () => {
-      const tools: LanguageModelV3FunctionTool[] = [
+      const tools: LanguageModelV4FunctionTool[] = [
         {
           type: "function",
           name: "get_weather",
@@ -72,7 +72,7 @@ describe("Tool Calling", () => {
     });
 
     it("handles tools with complex parameters", () => {
-      const tools: LanguageModelV3FunctionTool[] = [
+      const tools: LanguageModelV4FunctionTool[] = [
         {
           type: "function",
           name: "create_event",
@@ -103,7 +103,7 @@ describe("Tool Calling", () => {
     });
 
     it("handles tools with no description", () => {
-      const tools: LanguageModelV3FunctionTool[] = [
+      const tools: LanguageModelV4FunctionTool[] = [
         {
           type: "function",
           name: "simple_tool",
@@ -250,7 +250,7 @@ describe("Tool Calling", () => {
 
   describe("buildToolSystemPrompt", () => {
     it("builds system prompt with single tool", () => {
-      const tools: LanguageModelV3FunctionTool[] = [
+      const tools: LanguageModelV4FunctionTool[] = [
         {
           type: "function",
           name: "get_weather",
@@ -273,7 +273,7 @@ describe("Tool Calling", () => {
     });
 
     it("builds system prompt with multiple tools", () => {
-      const tools: LanguageModelV3FunctionTool[] = [
+      const tools: LanguageModelV4FunctionTool[] = [
         {
           type: "function",
           name: "get_weather",
@@ -297,7 +297,7 @@ describe("Tool Calling", () => {
     });
 
     it("handles tools without description", () => {
-      const tools: LanguageModelV3FunctionTool[] = [
+      const tools: LanguageModelV4FunctionTool[] = [
         {
           type: "function",
           name: "unnamed_tool",
@@ -312,7 +312,7 @@ describe("Tool Calling", () => {
     });
 
     it("includes parameter schema in prompt", () => {
-      const tools: LanguageModelV3FunctionTool[] = [
+      const tools: LanguageModelV4FunctionTool[] = [
         {
           type: "function",
           name: "get_weather",
@@ -337,14 +337,14 @@ describe("Tool Calling", () => {
 
   describe("convertMessages with tools", () => {
     it("adds tool system prompt when tools are provided", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         {
           role: "user",
           content: [{ type: "text", text: "What's the weather?" }],
         },
       ];
 
-      const tools: LanguageModelV3FunctionTool[] = [
+      const tools: LanguageModelV4FunctionTool[] = [
         {
           type: "function",
           name: "get_weather",
@@ -362,7 +362,7 @@ describe("Tool Calling", () => {
     });
 
     it("does not add tool prompt when no tools provided", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         { role: "user", content: [{ type: "text", text: "Hello" }] },
       ];
 
@@ -374,7 +374,7 @@ describe("Tool Calling", () => {
     });
 
     it("handles assistant messages with tool calls", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         {
           role: "assistant",
           content: [
@@ -399,7 +399,7 @@ describe("Tool Calling", () => {
     });
 
     it("handles mixed text and tool call content", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         {
           role: "assistant",
           content: [
@@ -423,7 +423,7 @@ describe("Tool Calling", () => {
     });
 
     it("handles tool result messages", () => {
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         {
           role: "tool",
           content: [
@@ -449,7 +449,7 @@ describe("Tool Calling", () => {
     });
 
     it("handles complete tool calling conversation", () => {
-      const tools: LanguageModelV3FunctionTool[] = [
+      const tools: LanguageModelV4FunctionTool[] = [
         {
           type: "function",
           name: "get_weather",
@@ -461,7 +461,7 @@ describe("Tool Calling", () => {
         },
       ];
 
-      const messages: LanguageModelV3Message[] = [
+      const messages: LanguageModelV4Message[] = [
         {
           role: "user",
           content: [{ type: "text", text: "What's the weather in Tokyo?" }],
