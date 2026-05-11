@@ -1,19 +1,13 @@
-import { gemma4_31b_it, llamaCpp } from "ai-sdk-llama-cpp";
+import { llamaCpp } from "ai-sdk-llama-cpp";
 import { stepCountIs, ModelMessage, streamText, tool } from "ai";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import * as readline from "node:readline/promises";
 import { z } from "zod";
+import { exampleModel, modelPath } from "./example-model.js";
 import { reportError } from "./report-error.js";
-
-const modelPath = join(
-  homedir(),
-  "opt/models/lmstudio-community/gemma-4-31B-it-GGUF/gemma-4-31B-it-Q4_K_M.gguf"
-);
 
 const model = llamaCpp({
   modelPath,
-  model: gemma4_31b_it,
+  model: exampleModel,
 });
 
 const terminal = readline.createInterface({

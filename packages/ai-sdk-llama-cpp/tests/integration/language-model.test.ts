@@ -237,6 +237,37 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       await reasoningModel.dispose();
     });
+
+    it("does not inject reasoning prompt when constrained by JSON grammar", async () => {
+      const reasoningModel = new LlamaCppLanguageModel({
+        modelPath: "/test/model.gguf",
+        reasoning: gemma4Reasoning,
+      });
+
+      await reasoningModel.doGenerate({
+        prompt: testMessages,
+        responseFormat: {
+          type: "json",
+          schema: {
+            type: "object",
+            properties: {
+              answer: { type: "string" },
+            },
+            required: ["answer"],
+          },
+        },
+      });
+
+      expect(nativeBinding.generate).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          messages: [{ role: "user", content: "Hello, how are you?" }],
+          grammar: expect.stringContaining("root ::="),
+        })
+      );
+
+      await reasoningModel.dispose();
+    });
   });
 
   describe("doStream", () => {

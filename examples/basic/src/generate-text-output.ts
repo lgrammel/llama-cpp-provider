@@ -1,18 +1,12 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import { gemma4_31b_it, llamaCpp } from "ai-sdk-llama-cpp";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { llamaCpp } from "ai-sdk-llama-cpp";
+import { exampleModel, modelPath } from "./example-model.js";
 import { reportError } from "./report-error.js";
-
-const modelPath = join(
-  homedir(),
-  "opt/models/lmstudio-community/gemma-4-31B-it-GGUF/gemma-4-31B-it-Q4_K_M.gguf"
-);
 
 const model = llamaCpp({
   modelPath,
-  model: gemma4_31b_it,
+  model: exampleModel,
 });
 
 try {

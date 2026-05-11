@@ -92,9 +92,7 @@ export function resolveReasoningConfig(
     opening: config.openingMarker ?? defaultConfig.openingMarker!,
     closing: config.closingMarker ?? defaultConfig.closingMarker!,
     promptPrefix:
-      config.promptPrefix === false
-        ? undefined
-        : config.promptPrefix,
+      config.promptPrefix === false ? undefined : config.promptPrefix,
   };
 }
 
@@ -721,7 +719,21 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
     options: LanguageModelV4CallOptions
   ): Promise<LanguageModelV4GenerateResult> {
     const handle = await this.ensureModelLoaded();
-    const reasoningConfig = resolveReasoningConfig(this.config.reasoning);
+    // Convert JSON schema to GBNF grammar if structured output is requested
+    // Note: Tool calls do NOT use grammar - the model decides whether to call tools
+    let grammar: string | undefined;
+    if (
+      options.responseFormat?.type === "json" &&
+      options.responseFormat.schema
+    ) {
+      grammar = convertJsonSchemaToGrammar(
+        options.responseFormat.schema as JSONSchema7
+      );
+    }
+
+    const reasoningConfig = grammar
+      ? undefined
+      : resolveReasoningConfig(this.config.reasoning);
 
     // Extract function tools from the tools array
     const functionTools =
@@ -738,18 +750,6 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
         : undefined,
       reasoningConfig
     );
-
-    // Convert JSON schema to GBNF grammar if structured output is requested
-    // Note: Tool calls do NOT use grammar - the model decides whether to call tools
-    let grammar: string | undefined;
-    if (
-      options.responseFormat?.type === "json" &&
-      options.responseFormat.schema
-    ) {
-      grammar = convertJsonSchemaToGrammar(
-        options.responseFormat.schema as JSONSchema7
-      );
-    }
 
     const generateOptions: GenerateOptions = {
       messages,
@@ -817,7 +817,21 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
     options: LanguageModelV4CallOptions
   ): Promise<LanguageModelV4StreamResult> {
     const handle = await this.ensureModelLoaded();
-    const reasoningConfig = resolveReasoningConfig(this.config.reasoning);
+    // Convert JSON schema to GBNF grammar if structured output is requested
+    // Note: Tool calls do NOT use grammar - the model decides whether to call tools
+    let grammar: string | undefined;
+    if (
+      options.responseFormat?.type === "json" &&
+      options.responseFormat.schema
+    ) {
+      grammar = convertJsonSchemaToGrammar(
+        options.responseFormat.schema as JSONSchema7
+      );
+    }
+
+    const reasoningConfig = grammar
+      ? undefined
+      : resolveReasoningConfig(this.config.reasoning);
 
     // Extract function tools from the tools array
     const functionTools =
@@ -834,18 +848,6 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
         : undefined,
       reasoningConfig
     );
-
-    // Convert JSON schema to GBNF grammar if structured output is requested
-    // Note: Tool calls do NOT use grammar - the model decides whether to call tools
-    let grammar: string | undefined;
-    if (
-      options.responseFormat?.type === "json" &&
-      options.responseFormat.schema
-    ) {
-      grammar = convertJsonSchemaToGrammar(
-        options.responseFormat.schema as JSONSchema7
-      );
-    }
 
     const generateOptions: GenerateOptions = {
       messages,
