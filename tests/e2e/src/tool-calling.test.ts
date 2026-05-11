@@ -9,7 +9,7 @@ import { llamaCpp, LlamaCppLanguageModel } from "ai-sdk-llama-cpp";
  * These tests require a real GGUF model file. Set the TEST_MODEL_PATH
  * environment variable to run these tests:
  *
- *   TEST_MODEL_PATH=./models/your-model.gguf bun run test:e2e
+ *   TEST_MODEL_PATH=./models/your-model.gguf pnpm test:e2e
  *
  * Note: Tool calling quality depends heavily on the model's capabilities.
  * Models specifically fine-tuned for function calling (e.g., Llama 3.1+,
@@ -247,7 +247,7 @@ describe("E2E Tool Calling Test Configuration", () => {
         "\n📋 Tool calling E2E tests skipped: Set TEST_MODEL_PATH to run with a real model"
       );
       console.log(
-        "   Example: TEST_MODEL_PATH=./models/model.gguf bun run test:e2e"
+        "   Example: TEST_MODEL_PATH=./models/model.gguf pnpm test:e2e"
       );
       console.log(
         "   Note: Use a model fine-tuned for function calling for best results\n"

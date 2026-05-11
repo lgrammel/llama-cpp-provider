@@ -9,7 +9,7 @@ find the full documentation for it [in the changesets repository](https://github
 To add a changeset, run:
 
 ```bash
-bun run changeset
+pnpm changeset
 ```
 
 This will prompt you to:
@@ -23,10 +23,10 @@ When you're ready to release:
 
 ```bash
 # Update versions and changelogs based on changesets
-bun changeset version
+pnpm changeset version
 
 # Publish to npm
-bun changeset publish
+pnpm changeset publish
 ```
 
 ## More information

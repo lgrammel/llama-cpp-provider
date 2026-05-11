@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+.pnpm-store/
 
 # Build outputs
 packages/*/dist/
@@ -22,7 +23,7 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-bun-debug.log*
+pnpm-debug.log*
 
 # Test models (users should download their own)
 *.gguf

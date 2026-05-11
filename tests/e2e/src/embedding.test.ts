@@ -8,7 +8,7 @@ import { llamaCpp, type LlamaCppEmbeddingModel } from "ai-sdk-llama-cpp";
  * These tests require a real GGUF model file. Set the TEST_EMBEDDING_PATH
  * environment variable to run these tests:
  *
- *   TEST_EMBEDDING_PATH=./models/your-model.gguf bun run test:e2e
+ *   TEST_EMBEDDING_PATH=./models/your-model.gguf pnpm test:e2e
  *
  * If TEST_EMBEDDING_PATH is not set, these tests will be skipped.
  */
@@ -112,7 +112,7 @@ describe("E2E Test Configuration", () => {
         "\n📋 E2E tests skipped: Set TEST_EMBEDDING_PATH to run with a real model"
       );
       console.log(
-        "   Example: TEST_EMBEDDING_PATH=./models/model.gguf bun run test:e2e\n"
+        "   Example: TEST_EMBEDDING_PATH=./models/model.gguf pnpm test:e2e\n"
       );
     } else {
       console.log(

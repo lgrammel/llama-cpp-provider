@@ -8,7 +8,7 @@ Before you begin, ensure you have the following installed:
 
 - **macOS** (Apple Silicon or Intel) - required, Windows/Linux not supported
 - **Node.js** >= 18.0.0
-- **Bun** >= 1.3.10
+- **pnpm** >= 9.0.0
 - **CMake** >= 3.15
 - **Xcode Command Line Tools**
 
@@ -19,8 +19,8 @@ xcode-select --install
 # Install CMake via Homebrew
 brew install cmake
 
-# Install Bun
-curl -fsSL https://bun.sh/install | bash
+# Install pnpm
+npm install -g pnpm
 
 # Optional: Install clang-format for C++ code formatting
 brew install clang-format
@@ -34,43 +34,43 @@ git clone https://github.com/lgrammel/ai-sdk-llama-cpp.git
 cd ai-sdk-llama-cpp
 
 # Install dependencies (this also builds the native addon)
-bun install
+pnpm install
 
 # Build TypeScript
-bun run build:ts
+pnpm build:ts
 ```
 
-The `bun install` step automatically compiles llama.cpp and builds the native Node.js addon.
+The `pnpm install` step automatically compiles llama.cpp and builds the native Node.js addon.
 
 ## Development Commands
 
 | Command | Description |
 |---------|-------------|
-| `bun run build` | Build everything (native + TypeScript) |
-| `bun run build:ts` | Build TypeScript only |
-| `bun run build:native` | Build native addon only |
-| `bun run clean` | Remove build artifacts |
-| `bun run test` | Run tests in watch mode |
-| `bun run test:run` | Run all tests once |
-| `bun run test:unit` | Run unit tests only |
-| `bun run test:integration` | Run integration tests only |
-| `bun run test:e2e` | Run E2E tests (requires `TEST_MODEL_PATH`) |
-| `bun run lint` | Check TypeScript with oxlint |
-| `bun run lint:fix` | Fix auto-fixable oxlint issues |
-| `bun run format:check` | Check code formatting |
-| `bun run format:fix` | Fix code formatting |
+| `pnpm build` | Build everything (native + TypeScript) |
+| `pnpm build:ts` | Build TypeScript only |
+| `pnpm build:native` | Build native addon only |
+| `pnpm clean` | Remove build artifacts |
+| `pnpm test` | Run tests in watch mode |
+| `pnpm test:run` | Run all tests once |
+| `pnpm test:unit` | Run unit tests only |
+| `pnpm test:integration` | Run integration tests only |
+| `pnpm test:e2e` | Run E2E tests (requires `TEST_MODEL_PATH`) |
+| `pnpm lint` | Check TypeScript with oxlint |
+| `pnpm lint:fix` | Fix auto-fixable oxlint issues |
+| `pnpm format:check` | Check code formatting |
+| `pnpm format:fix` | Fix code formatting |
 
 ## Running Examples
 
 ```bash
 # From the repository root
-bun run --filter @examples/basic generate-text
-bun run --filter @examples/basic stream-text
-bun run --filter @examples/basic generate-text-tool-call
+pnpm --filter @examples/basic generate-text
+pnpm --filter @examples/basic stream-text
+pnpm --filter @examples/basic generate-text-tool-call
 
 # Or from the examples directory
 cd examples/basic
-bun run generate-text
+pnpm generate-text
 ```
 
 ## Making Changes
@@ -80,9 +80,9 @@ bun run generate-text
 1. **Fork the repository** and clone your fork
 2. **Create a feature branch**: `git checkout -b my-feature`
 3. **Make your changes**
-4. **Run tests**: `bun run test:run`
-5. **Run the linter and formatter**: `bun run lint && bun run format:fix`
-6. **Add a changeset** (if applicable): `bun run changeset`
+4. **Run tests**: `pnpm test:run`
+5. **Run the linter and formatter**: `pnpm lint && pnpm format:fix`
+6. **Add a changeset** (if applicable): `pnpm changeset`
 7. **Commit your changes** with a descriptive message
 8. **Push to your fork** and open a pull request
 
@@ -115,7 +115,7 @@ This project uses [changesets](https://github.com/changesets/changesets) for ver
 When you make changes that should be released, add a changeset:
 
 ```bash
-bun run changeset
+pnpm changeset
 ```
 
 This will prompt you to:
@@ -160,7 +160,7 @@ Releases are done manually by maintainers.
 Run the version command to consume all changesets and update package versions:
 
 ```bash
-bun run changeset:version
+pnpm changeset:version
 ```
 
 This will:
@@ -187,7 +187,7 @@ npm login
 Then publish:
 
 ```bash
-bun run changeset:publish
+pnpm changeset:publish
 ```
 
 This will build the TypeScript and publish the package to npm.

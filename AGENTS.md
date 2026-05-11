@@ -8,22 +8,22 @@ This file provides guidance for AI coding agents (Cursor, Copilot, Claude Code) 
 
 **Platform Support**: macOS only (Apple Silicon or Intel)
 
-**Monorepo Structure**: This project uses Bun workspaces with packages in `packages/` and examples in `examples/`.
+**Monorepo Structure**: This project uses pnpm workspaces with packages in `packages/` and examples in `examples/`.
 
 ## Quick Reference
 
 | Task | Command |
 |------|---------|
-| Install dependencies | `bun install` |
-| Build everything | `bun run build` |
-| Build TypeScript only | `bun run build:ts` |
-| Build native only | `bun run build:native` |
-| Run all tests once | `bun run test:run` |
-| Run unit tests | `bun run test:unit` |
-| Run integration tests | `bun run test:integration` |
-| Run E2E tests | `TEST_MODEL_PATH=./models/model.gguf bun run test:e2e` |
-| Run example | `bun run --filter @examples/basic generate-text` |
-| Clean build artifacts | `bun run clean` |
+| Install dependencies | `pnpm install` |
+| Build everything | `pnpm build` |
+| Build TypeScript only | `pnpm build:ts` |
+| Build native only | `pnpm build:native` |
+| Run all tests once | `pnpm test:run` |
+| Run unit tests | `pnpm test:unit` |
+| Run integration tests | `pnpm test:integration` |
+| Run E2E tests | `TEST_MODEL_PATH=./models/model.gguf pnpm test:e2e` |
+| Run example | `pnpm --filter @examples/basic generate-text` |
+| Clean build artifacts | `pnpm clean` |
 
 ## Setup & Installation
 
@@ -31,7 +31,7 @@ This file provides guidance for AI coding agents (Cursor, Copilot, Claude Code) 
 
 - **macOS** (Apple Silicon or Intel) - required
 - **Node.js** >= 18.0.0
-- **Bun** >= 1.3.10
+- **pnpm** >= 9.0.0
 - **CMake** >= 3.15
 - **Xcode Command Line Tools**
 
@@ -42,8 +42,8 @@ xcode-select --install
 # Install CMake via Homebrew (if not already installed)
 brew install cmake
 
-# Install Bun (if not already installed)
-curl -fsSL https://bun.sh/install | bash
+# Install pnpm (if not already installed)
+npm install -g pnpm
 ```
 
 ### Installation Steps
@@ -54,13 +54,13 @@ git clone https://github.com/lgrammel/ai-sdk-llama-cpp.git
 cd ai-sdk-llama-cpp
 
 # Install dependencies (this also builds the native addon)
-bun install
+pnpm install
 
 # Build TypeScript
-bun run build:ts
+pnpm build:ts
 ```
 
-The `bun install` step automatically:
+The `pnpm install` step automatically:
 1. Detects macOS and verifies platform compatibility
 2. Compiles llama.cpp as a static library with Metal support
 3. Builds the native Node.js addon
@@ -76,25 +76,25 @@ The llama.cpp source is fetched during package installation from the `llamaCpp` 
 3. Remove the existing local checkout and native build artifacts:
 
 ```bash
-bun run --filter ai-sdk-llama-cpp clean
+pnpm --filter ai-sdk-llama-cpp clean
 ```
 
 4. Reinstall or build the native addon so the postinstall script fetches the new llama.cpp revision:
 
 ```bash
-bun install
+pnpm install
 # or, if dependencies are already installed and llama.cpp is present:
-bun run build:native
+pnpm build:native
 ```
 
 5. Verify the TypeScript and native bindings still compile:
 
 ```bash
-bun run build:ts
-bun run test:run
+pnpm build:ts
+pnpm test:run
 ```
 
-If llama.cpp API changes break the native wrapper, update `packages/ai-sdk-llama-cpp/native/llama-wrapper.cpp`, `packages/ai-sdk-llama-cpp/native/llama-wrapper.h`, and `packages/ai-sdk-llama-cpp/native/binding.cpp` as needed, then rerun `bun run build:native`.
+If llama.cpp API changes break the native wrapper, update `packages/ai-sdk-llama-cpp/native/llama-wrapper.cpp`, `packages/ai-sdk-llama-cpp/native/llama-wrapper.h`, and `packages/ai-sdk-llama-cpp/native/binding.cpp` as needed, then rerun `pnpm build:native`.
 
 ## Project Structure
 
@@ -127,7 +127,7 @@ If llama.cpp API changes break the native wrapper, update `packages/ai-sdk-llama
 │           ├── generate-text-output.ts
 │           ├── chatbot.ts
 │           └── embed-many.ts
-├── package.json                # Root package scripts and workspace configuration
+├── pnpm-workspace.yaml         # Workspace configuration
 └── package.json                # Root package.json with workspace scripts
 ```
 
@@ -143,20 +143,20 @@ If llama.cpp API changes break the native wrapper, update `packages/ai-sdk-llama
 
 ```bash
 # Run all tests once
-bun run test:run
+pnpm test:run
 
 # Run tests in watch mode (for development)
-bun run test
+pnpm test
 
 # Run specific test categories
-bun run test:unit
-bun run test:integration
+pnpm test:unit
+pnpm test:integration
 
 # Run E2E tests (requires a GGUF model)
-TEST_MODEL_PATH=./models/your-model.gguf bun run test:e2e
+TEST_MODEL_PATH=./models/your-model.gguf pnpm test:e2e
 
 # Run tests with coverage
-bun run test:coverage
+pnpm test:coverage
 ```
 
 ### E2E Test Requirements
@@ -169,7 +169,7 @@ mkdir -p models
 wget -P models/ https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf
 
 # Run E2E tests
-TEST_MODEL_PATH=./models/Llama-3.2-1B-Instruct-Q4_K_M.gguf bun run test:e2e
+TEST_MODEL_PATH=./models/Llama-3.2-1B-Instruct-Q4_K_M.gguf pnpm test:e2e
 ```
 
 ### Writing Tests
@@ -187,16 +187,16 @@ TEST_MODEL_PATH=./models/Llama-3.2-1B-Instruct-Q4_K_M.gguf bun run test:e2e
 Examples are in the `examples/basic` workspace package:
 
 ```bash
-# Run examples using Bun workspace filter
-bun run --filter @examples/basic generate-text
-bun run --filter @examples/basic stream-text
-bun run --filter @examples/basic generate-text-output
-bun run --filter @examples/basic chatbot
-bun run --filter @examples/basic embed-many
+# Run examples using pnpm workspace filter
+pnpm --filter @examples/basic generate-text
+pnpm --filter @examples/basic stream-text
+pnpm --filter @examples/basic generate-text-output
+pnpm --filter @examples/basic chatbot
+pnpm --filter @examples/basic embed-many
 
 # Or run directly from the examples/basic directory
 cd examples/basic
-bun run generate-text
+pnpm generate-text
 ```
 
 ### Example Structure
@@ -234,8 +234,8 @@ try {
 2. Import from `"ai-sdk-llama-cpp"` (workspace dependency)
 3. Use `try/finally` to ensure `model.dispose()` is called
 4. Update the model path to your local GGUF model
-5. Add a script to `examples/basic/package.json` (e.g., `"my-example": "bun src/my-example.ts"`)
-6. Run with `bun run --filter @examples/basic your-script-name`
+5. Add a script to `examples/basic/package.json` (e.g., `"my-example": "tsx src/my-example.ts"`)
+6. Run with `pnpm --filter @examples/basic your-script-name`
 
 Example template:
 
@@ -323,25 +323,25 @@ try {
 2. Export from `src/index.ts` if public API
 3. Add unit tests in `packages/ai-sdk-llama-cpp/tests/unit/`
 4. Add integration tests in `packages/ai-sdk-llama-cpp/tests/integration/`
-5. Run `bun run test:run` to verify
-6. Build with `bun run build:ts`
+5. Run `pnpm test:run` to verify
+6. Build with `pnpm build:ts`
 
 ### Modifying Native Bindings
 
 1. Edit files in `packages/ai-sdk-llama-cpp/native/`
-2. Rebuild with `bun run build:native`
-3. Test with `bun run test:run`
+2. Rebuild with `pnpm build:native`
+3. Test with `pnpm test:run`
 
 ### Debugging
 
 - Enable verbose llama.cpp output: `llamaCpp({ modelPath, debug: true })`
-- Run specific test: `bun run --filter ai-sdk-llama-cpp vitest run tests/unit/provider.test.ts`
-- Debug build: `bun run --filter ai-sdk-llama-cpp build:native:debug`
+- Run specific test: `pnpm --filter ai-sdk-llama-cpp exec vitest run tests/unit/provider.test.ts`
+- Debug build: `pnpm --filter ai-sdk-llama-cpp build:native:debug`
 
 ## Dependencies
 
 - **Runtime**: `@ai-sdk/provider`, `cmake-js`, `node-addon-api`
-- **Dev**: `ai`, `typescript`, `vitest`, `zod`
+- **Dev**: `ai`, `typescript`, `vitest`, `tsx`, `zod`
 
 ## Limitations
 
