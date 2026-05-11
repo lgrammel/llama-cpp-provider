@@ -28,6 +28,7 @@ import {
   convertJsonSchemaToGrammar,
   SchemaConverter,
 } from "./json-schema-to-grammar.js";
+import type { LlamaCppReasoningConfig } from "./llama-cpp-provider-config.js";
 
 export interface LlamaCppModelConfig {
   modelPath: string;
@@ -62,27 +63,6 @@ export interface LlamaCppGenerationConfig {
   topP?: number;
   topK?: number;
   stopSequences?: string[];
-}
-
-export type LlamaCppReasoningFormat =
-  | "gemma4"
-  | "think-tags"
-  | {
-      opening: string;
-      closing: string;
-    };
-
-export interface LlamaCppReasoningConfig {
-  /**
-   * Reasoning marker format to extract from model output.
-   * Default: "gemma4" (`<|channel>thought\n...<channel|>`)
-   */
-  format?: LlamaCppReasoningFormat;
-  /**
-   * Prefix added to the first system prompt to enable thinking.
-   * Gemma 4 defaults to `<|think|>\n`. Set to false to disable prompt injection.
-   */
-  promptPrefix?: string | false;
 }
 
 interface ResolvedReasoningConfig {

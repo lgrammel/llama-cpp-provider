@@ -1,14 +1,16 @@
 export {
   llamaCpp,
   type LlamaCppProvider,
-  type LlamaCppProviderConfig,
 } from "./llama-cpp-provider.js";
+export {
+  type LlamaCppProviderConfig,
+  type LlamaCppReasoningConfig,
+  type LlamaCppReasoningFormat,
+} from "./llama-cpp-provider-config.js";
 export {
   LlamaCppLanguageModel,
   type LlamaCppModelConfig,
   type LlamaCppGenerationConfig,
-  type LlamaCppReasoningConfig,
-  type LlamaCppReasoningFormat,
   // Exported for testing
   convertMessages,
   convertFinishReason,

@@ -13,7 +13,7 @@ import {
   type LoadModelOptions,
   type EmbedOptions,
 } from "./native-binding.js";
-import type { LlamaCppProviderConfig } from "./llama-cpp-provider.js";
+import type { LlamaCppProviderConfig } from "./llama-cpp-provider-config.js";
 
 export class LlamaCppEmbeddingModel implements EmbeddingModelV4 {
   readonly specificationVersion = "v4" as const;

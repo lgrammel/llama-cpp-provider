@@ -1,50 +1,9 @@
 import {
   LlamaCppLanguageModel,
-  type LlamaCppReasoningConfig,
   type LlamaCppModelConfig,
 } from "./llama-cpp-language-model.js";
 import { LlamaCppEmbeddingModel } from "./llama-cpp-embedding-model.js";
-
-export interface LlamaCppProviderConfig {
-  /**
-   * Path to the GGUF model file.
-   */
-  modelPath: string;
-
-  /**
-   * Maximum context size (default: 2048).
-   */
-  contextSize?: number;
-
-  /**
-   * Number of layers to offload to GPU (default: 99, meaning all layers).
-   * Set to 0 to disable GPU acceleration.
-   */
-  gpuLayers?: number;
-
-  /**
-   * Number of CPU threads to use (default2: 4).
-   */
-  threads?: number;
-
-  /**
-   * Enable verbose debug output from llama.cpp (default: false).
-   */
-  debug?: boolean;
-
-  /**
-   * Chat template to use for formatting messages.
-   * - "auto" (default): Use the template embedded in the GGUF model file
-   * - Template name: Use a specific built-in template (e.g., "llama3", "gemma")
-   */
-  chatTemplate?: string;
-
-  /**
-   * Extract model thinking into AI SDK reasoning parts.
-   * Set to true for Gemma 4 (`<|channel>thought\n...<channel|>`) support.
-   */
-  reasoning?: boolean | LlamaCppReasoningConfig;
-}
+import type { LlamaCppProviderConfig } from "./llama-cpp-provider-config.js";
 
 export interface LlamaCppProvider {
   (config: LlamaCppProviderConfig): LlamaCppLanguageModel;
