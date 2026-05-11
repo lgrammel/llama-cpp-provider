@@ -1,12 +1,12 @@
 import { runAgentTUI } from "@lgrammel/agent-tui";
 import { ToolLoopAgent } from "ai";
-import { llamaCpp } from "ai-sdk-llama-cpp";
-import { exampleModel, modelPath } from "./example-model.js";
+import { gemma4_31b_it, llamaCpp } from "ai-sdk-llama-cpp";
+import { modelPath } from "./example-model.js";
 import { reportError } from "./report-error.js";
 
 const model = llamaCpp({
   modelPath,
-  model: exampleModel,
+  model: gemma4_31b_it,
 });
 
 try {
