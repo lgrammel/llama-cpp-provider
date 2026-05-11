@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { llamaCpp, LlamaCppLanguageModel } from "../../src/index.js";
+import {
+  gemma4Reasoning,
+  llamaCpp,
+  LlamaCppLanguageModel,
+} from "../../src/index.js";
 
 describe("llamaCpp", () => {
   describe("return value", () => {
@@ -21,10 +25,9 @@ describe("llamaCpp", () => {
       expect(model.modelId).toBe("/path/to/my-model.gguf");
     });
 
-    it("passes all config options through", () => {
+    it("accepts machine-specific load options at the top level", () => {
       const model = llamaCpp({
         modelPath: "/path/to/model.gguf",
-        contextSize: 4096,
         gpuLayers: 32,
         threads: 8,
         debug: true,
@@ -32,6 +35,27 @@ describe("llamaCpp", () => {
 
       // We can verify the model was created (config is private, but modelId confirms path)
       expect(model.modelId).toBe("/path/to/model.gguf");
+    });
+
+    it("passes nested model-specific options through", () => {
+      const model = llamaCpp({
+        modelPath: "/path/to/model.gguf",
+        model: {
+          contextSize: 4096,
+          chatTemplate: "gemma",
+          reasoning: gemma4Reasoning,
+        },
+      });
+
+      expect(model).toHaveProperty("config", {
+        modelPath: "/path/to/model.gguf",
+        contextSize: 4096,
+        gpuLayers: undefined,
+        threads: undefined,
+        debug: undefined,
+        chatTemplate: "gemma",
+        reasoning: gemma4Reasoning,
+      });
     });
 
     it("handles minimal config with only modelPath", () => {

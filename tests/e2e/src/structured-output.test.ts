@@ -29,7 +29,9 @@ describeE2E("E2E Structured Output Tests", () => {
 
     model = llamaCpp({
       modelPath: TEST_MODEL_PATH,
-      contextSize: 4096,
+      model: {
+        contextSize: 4096,
+      },
       gpuLayers: 0, // Use CPU for CI compatibility
       threads: 4,
     });

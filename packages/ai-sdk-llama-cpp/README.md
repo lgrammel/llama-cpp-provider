@@ -222,9 +222,6 @@ const model = llamaCpp({
   // Required: Path to the GGUF model file
   modelPath: "./models/your-model.gguf",
 
-  // Optional: Maximum context size (default: 2048)
-  contextSize: 4096,
-
   // Optional: Number of layers to offload to GPU
   // Default: 99 (all layers). Set to 0 to disable GPU.
   gpuLayers: 99,
@@ -235,20 +232,26 @@ const model = llamaCpp({
   // Optional: Enable verbose debug output from llama.cpp (default: false)
   debug: true,
 
-  // Optional: Chat template to use for formatting messages
-  // - "auto" (default): Use the template embedded in the GGUF model file
-  // - Template name: Use a specific built-in template (e.g., "llama3", "chatml", "gemma")
-  chatTemplate: "auto",
+  // Optional: Model-specific information
+  model: {
+    // Maximum context size (default: 2048)
+    contextSize: 4096,
 
-  // Optional: Extract model thinking into AI SDK reasoning parts.
-  // Defaults to <think>...</think> markers.
-  reasoning: {},
+    // Chat template to use for formatting messages
+    // - "auto" (default): Use the template embedded in the GGUF model file
+    // - Template name: Use a specific built-in template (e.g., "llama3", "chatml", "gemma")
+    chatTemplate: "auto",
+
+    // Extract model thinking into AI SDK reasoning parts.
+    // Defaults to <think>...</think> markers.
+    reasoning: {},
+  },
 });
 ```
 
 #### Chat Templates
 
-The `chatTemplate` option controls how messages are formatted before being sent to the model. Available templates include:
+The `model.chatTemplate` option controls how messages are formatted before being sent to the model. Available templates include:
 
 - `chatml`, `llama2`, `llama2-sys`, `llama3`, `llama4`
 - `mistral-v1`, `mistral-v3`, `mistral-v7`
@@ -258,7 +261,7 @@ The `chatTemplate` option controls how messages are formatted before being sent 
 
 #### Reasoning / Thinking
 
-Set `reasoning: {}` to extract output between `<think>` and `</think>` into AI SDK `reasoning` parts.
+Set `model.reasoning: {}` to extract output between `<think>` and `</think>` into AI SDK `reasoning` parts.
 
 ```typescript
 import { generateText } from "ai";
@@ -266,7 +269,9 @@ import { llamaCpp } from "ai-sdk-llama-cpp";
 
 const model = llamaCpp({
   modelPath: "./models/your-model.gguf",
-  reasoning: {},
+  model: {
+    reasoning: {},
+  },
 });
 
 try {
@@ -289,8 +294,10 @@ import { gemma4Reasoning, llamaCpp } from "ai-sdk-llama-cpp";
 
 const model = llamaCpp({
   modelPath: "./models/gemma-4-31b-it.Q4_K_M.gguf",
-  chatTemplate: "gemma",
-  reasoning: gemma4Reasoning,
+  model: {
+    chatTemplate: "gemma",
+    reasoning: gemma4Reasoning,
+  },
 });
 ```
 
@@ -299,9 +306,11 @@ For other thinking formats, pass custom delimiters:
 ```typescript
 const model = llamaCpp({
   modelPath: "./models/your-model.gguf",
-  reasoning: {
-    openingMarker: "[reasoning]",
-    closingMarker: "[/reasoning]",
+  model: {
+    reasoning: {
+      openingMarker: "[reasoning]",
+      closingMarker: "[/reasoning]",
+    },
   },
 });
 ```
@@ -352,12 +361,12 @@ Creates a new llama.cpp language model instance.
 **Parameters:**
 
 - `config.modelPath` (string, required): Path to the GGUF model file
-- `config.contextSize` (number, optional): Maximum context size. Default: 2048
 - `config.gpuLayers` (number, optional): GPU layers to offload. Default: 99
 - `config.threads` (number, optional): CPU threads. Default: 4
 - `config.debug` (boolean, optional): Enable verbose llama.cpp output. Default: false
-- `config.chatTemplate` (string, optional): Chat template to use for formatting messages. Default: "auto"
-- `config.reasoning` (object, optional): Extract thinking into AI SDK reasoning parts. Defaults to `<think>...</think>` markers when set to `{}`.
+- `config.model.contextSize` (number, optional): Maximum context size. Default: 2048
+- `config.model.chatTemplate` (string, optional): Chat template to use for formatting messages. Default: "auto"
+- `config.model.reasoning` (object, optional): Extract thinking into AI SDK reasoning parts. Defaults to `<think>...</think>` markers when set to `{}`
 
 **Returns:** `LlamaCppLanguageModel` - A language model compatible with the Vercel AI SDK
 

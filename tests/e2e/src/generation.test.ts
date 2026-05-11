@@ -28,7 +28,9 @@ describeE2E("E2E Generation Tests", () => {
 
     model = llamaCpp({
       modelPath: TEST_MODEL_PATH,
-      contextSize: 2048,
+      model: {
+        contextSize: 2048,
+      },
       gpuLayers: 0, // Use CPU for CI compatibility
       threads: 4,
     });
@@ -213,7 +215,9 @@ describeE2E("E2E Generation Tests", () => {
 
       const model2 = llamaCpp({
         modelPath: TEST_MODEL_PATH,
-        contextSize: 1024,
+        model: {
+          contextSize: 1024,
+        },
       });
 
       const { text } = await generateText({

@@ -5,6 +5,7 @@ export {
 export {
   gemma4Reasoning,
   thinkTagsReasoning,
+  type LlamaCppModelInfo,
   type LlamaCppProviderConfig,
   type LlamaCppReasoningConfig,
 } from "./llama-cpp-provider-config.js";

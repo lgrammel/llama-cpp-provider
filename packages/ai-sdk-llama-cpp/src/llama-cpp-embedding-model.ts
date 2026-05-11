@@ -56,7 +56,7 @@ export class LlamaCppEmbeddingModel implements EmbeddingModelV4 {
     this.initPromise = (async () => {
       const options: LoadModelOptions = {
         modelPath: this.config.modelPath,
-        contextSize: this.config.contextSize ?? 2048,
+        contextSize: this.config.model?.contextSize ?? 2048,
         gpuLayers: this.config.gpuLayers ?? 99,
         threads: this.config.threads ?? 4,
         debug: this.config.debug ?? false,

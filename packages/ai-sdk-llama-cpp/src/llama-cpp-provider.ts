@@ -15,12 +15,12 @@ function createLlamaCpp(): LlamaCppProvider {
   const provider = (config: LlamaCppProviderConfig): LlamaCppLanguageModel => {
     const modelConfig: LlamaCppModelConfig = {
       modelPath: config.modelPath,
-      contextSize: config.contextSize,
+      contextSize: config.model?.contextSize,
       gpuLayers: config.gpuLayers,
       threads: config.threads,
       debug: config.debug,
-      chatTemplate: config.chatTemplate,
-      reasoning: config.reasoning,
+      chatTemplate: config.model?.chatTemplate,
+      reasoning: config.model?.reasoning,
     };
 
     return new LlamaCppLanguageModel(modelConfig);

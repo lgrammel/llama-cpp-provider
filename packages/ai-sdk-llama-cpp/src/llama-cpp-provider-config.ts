@@ -27,6 +27,25 @@ export const thinkTagsReasoning: LlamaCppReasoningConfig = {
   closingMarker: "</think>",
 };
 
+export interface LlamaCppModelInfo {
+  /**
+   * Maximum context size (default: 2048).
+   */
+  contextSize?: number;
+
+  /**
+   * Chat template to use for formatting messages.
+   * - "auto" (default): Use the template embedded in the GGUF model file
+   * - Template name: Use a specific built-in template (e.g., "llama3", "gemma")
+   */
+  chatTemplate?: string;
+
+  /**
+   * Extract model thinking into AI SDK reasoning parts.
+   */
+  reasoning?: LlamaCppReasoningConfig;
+}
+
 export interface LlamaCppProviderConfig {
   /**
    * Path to the GGUF model file.
@@ -34,9 +53,9 @@ export interface LlamaCppProviderConfig {
   modelPath: string;
 
   /**
-   * Maximum context size (default: 2048).
+   * Model-specific metadata such as context size, chat template, and reasoning format.
    */
-  contextSize?: number;
+  model?: LlamaCppModelInfo;
 
   /**
    * Number of layers to offload to GPU (default: 99, meaning all layers).
@@ -53,16 +72,4 @@ export interface LlamaCppProviderConfig {
    * Enable verbose debug output from llama.cpp (default: false).
    */
   debug?: boolean;
-
-  /**
-   * Chat template to use for formatting messages.
-   * - "auto" (default): Use the template embedded in the GGUF model file
-   * - Template name: Use a specific built-in template (e.g., "llama3", "gemma")
-   */
-  chatTemplate?: string;
-
-  /**
-   * Extract model thinking into AI SDK reasoning parts.
-   */
-  reasoning?: LlamaCppReasoningConfig;
 }

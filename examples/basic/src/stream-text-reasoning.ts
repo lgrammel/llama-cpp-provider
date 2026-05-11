@@ -5,7 +5,10 @@ import { reportError } from "./report-error.js";
 
 const model = llamaCpp({
   ...modelOptions,
-  reasoning: {},
+  model: {
+    ...modelOptions.model,
+    reasoning: {},
+  },
 });
 
 try {

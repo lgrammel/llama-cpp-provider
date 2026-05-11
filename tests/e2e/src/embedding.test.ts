@@ -28,7 +28,9 @@ describeE2E("E2E Embedding Tests", () => {
 
     model = llamaCpp.embedding({
       modelPath: TEST_EMBEDDING_PATH,
-      contextSize: 2048,
+      model: {
+        contextSize: 2048,
+      },
       gpuLayers: 0, // Use CPU for CI compatibility
       threads: 4,
     });
@@ -68,7 +70,9 @@ describeE2E("E2E Embedding Tests", () => {
 
       const model2 = llamaCpp.embedding({
         modelPath: TEST_EMBEDDING_PATH,
-        contextSize: 1024,
+        model: {
+          contextSize: 1024,
+        },
       });
 
       const { embedding } = await embed({

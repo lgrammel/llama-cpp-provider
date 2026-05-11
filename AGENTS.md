@@ -179,7 +179,8 @@ import { llamaCpp } from "ai-sdk-llama-cpp";
 // Create model instance with config
 const model = llamaCpp({ 
   modelPath: "./models/your-model.gguf",
-  // Optional config: contextSize, gpuLayers, threads, debug, chatTemplate
+  // Optional load config: gpuLayers, threads, debug
+  // Optional model info: model.contextSize, model.chatTemplate, model.reasoning
 });
 
 try {
@@ -214,7 +215,9 @@ import { llamaCpp } from "ai-sdk-llama-cpp";
 
 const model = llamaCpp({ 
   modelPath: "./models/your-model.gguf",
-  contextSize: 4096,  // optional
+  model: {
+    contextSize: 4096, // optional
+  },
 });
 
 try {
