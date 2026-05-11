@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "agent": "tsx src/agent.ts",
+    "agent-tool-call": "tsx src/agent-tool-call.ts",
     "generate-text": "tsx src/generate-text.ts",
     "generate-text-output": "tsx src/generate-text-output.ts",
     "stream-text": "tsx src/stream-text.ts",
@@ -14,6 +16,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@lgrammel/agent-tui": "^0.0.1",
     "ai": "7.0.0-canary.130",
     "ai-sdk-llama-cpp": "workspace:*",
     "zod": "^4.3.5"
