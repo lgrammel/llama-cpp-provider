@@ -1,11 +1,20 @@
-import { llamaCpp } from "ai-sdk-llama-cpp";
+import { gemma4_31b_it, llamaCpp } from "ai-sdk-llama-cpp";
 import { stepCountIs, ModelMessage, streamText, tool } from "ai";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import * as readline from "node:readline/promises";
 import { z } from "zod";
-import { modelOptions } from "./model-path.js";
 import { reportError } from "./report-error.js";
 
-const model = llamaCpp(modelOptions);
+const modelPath = join(
+  homedir(),
+  "opt/models/lmstudio-community/gemma-4-31B-it-GGUF/gemma-4-31B-it-Q4_K_M.gguf"
+);
+
+const model = llamaCpp({
+  modelPath,
+  model: gemma4_31b_it,
+});
 
 const terminal = readline.createInterface({
   input: process.stdin,
@@ -53,7 +62,7 @@ try {
     messages.push(...(await result.response).messages);
   }
 } catch (error) {
-  reportError(error);
+  reportError(error, modelPath);
   process.exitCode = 1;
 } finally {
   await model.dispose();

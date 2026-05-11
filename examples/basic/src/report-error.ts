@@ -1,6 +1,4 @@
-import { modelPath } from "./model-path.js";
-
-export function reportError(error: unknown): void {
+export function reportError(error: unknown, modelPath: string): void {
   console.error("\nExample failed.");
   console.error(`Model path: ${modelPath}`);
   console.error(formatError(error));
