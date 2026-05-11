@@ -65,6 +65,37 @@ The `pnpm install` step automatically:
 2. Compiles llama.cpp as a static library with Metal support
 3. Builds the native Node.js addon
 
+### Updating And Building llama.cpp
+
+The llama.cpp source is fetched during package installation from the `llamaCpp` config in `packages/ai-sdk-llama-cpp/package.json`. To update the pinned upstream revision:
+
+1. Choose the upstream commit from `https://github.com/ggerganov/llama.cpp`.
+2. Update `packages/ai-sdk-llama-cpp/package.json`:
+   - Keep `llamaCpp.repo` pointing at the upstream repository unless intentionally changing forks.
+   - Set `llamaCpp.commit` to the new commit SHA.
+3. Remove the existing local checkout and native build artifacts:
+
+```bash
+pnpm --filter ai-sdk-llama-cpp clean
+```
+
+4. Reinstall or build the native addon so the postinstall script fetches the new llama.cpp revision:
+
+```bash
+pnpm install
+# or, if dependencies are already installed and llama.cpp is present:
+pnpm build:native
+```
+
+5. Verify the TypeScript and native bindings still compile:
+
+```bash
+pnpm build:ts
+pnpm test:run
+```
+
+If llama.cpp API changes break the native wrapper, update `packages/ai-sdk-llama-cpp/native/llama-wrapper.cpp`, `packages/ai-sdk-llama-cpp/native/llama-wrapper.h`, and `packages/ai-sdk-llama-cpp/native/binding.cpp` as needed, then rerun `pnpm build:native`.
+
 ## Project Structure
 
 ```
