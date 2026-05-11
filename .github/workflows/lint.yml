@@ -1,4 +1,4 @@
-name: Format Check
+name: Lint
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  format:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,11 +20,8 @@ jobs:
           node-version: "20"
           cache: "pnpm"
 
-      - name: Install clang-format
-        run: sudo apt-get update && sudo apt-get install -y clang-format
-
       - name: Install dependencies
         run: pnpm install --ignore-scripts
 
-      - name: Check formatting
-        run: pnpm run format:check
+      - name: Run lint
+        run: pnpm run lint
