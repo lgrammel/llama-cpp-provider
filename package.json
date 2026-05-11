@@ -3,6 +3,8 @@
   "private": true,
   "devDependencies": {
     "@changesets/cli": "^2.29.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2",
     "oxfmt": "^0.48.0",
     "oxlint": "^1.63.0"
   },
@@ -10,6 +12,7 @@
     "changeset": "changeset",
     "changeset:version": "changeset version",
     "changeset:publish": "pnpm build:ts && changeset publish",
+    "prepare": "husky",
     "build": "pnpm -r build",
     "build:ts": "pnpm -r build:ts",
     "build:native": "pnpm --filter ai-sdk-llama-cpp build:native",
@@ -25,6 +28,15 @@
     "lint:fix": "oxlint --fix .",
     "format:check": "oxfmt --check \"packages/*/src/**/*.ts\" \"packages/*/tests/**/*.ts\" \"examples/**/*.ts\" \"tests/**/*.ts\" && clang-format --dry-run --Werror packages/ai-sdk-llama-cpp/native/*.cpp packages/ai-sdk-llama-cpp/native/*.h",
     "format:fix": "oxfmt --write \"packages/*/src/**/*.ts\" \"packages/*/tests/**/*.ts\" \"examples/**/*.ts\" \"tests/**/*.ts\" && clang-format -i packages/ai-sdk-llama-cpp/native/*.cpp packages/ai-sdk-llama-cpp/native/*.h"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "oxlint --fix",
+      "oxfmt --write"
+    ],
+    "packages/ai-sdk-llama-cpp/native/*.{cpp,h}": [
+      "clang-format -i"
+    ]
   },
   "engines": {
     "node": ">=18.0.0"
