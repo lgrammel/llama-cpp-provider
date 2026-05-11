@@ -339,10 +339,10 @@ Both language and embedding models expose `dispose()`. Call it when finished to 
 From the repository root:
 
 ```bash
-pnpm install
-pnpm build:ts
-pnpm build:native
-pnpm test:run
+bun install
+bun run build:ts
+bun run build:native
+bun run test:run
 ```
 
 The native build is configured by `packages/ai-sdk-llama-cpp/CMakeLists.txt` and `packages/ai-sdk-llama-cpp/native/CMakeLists.txt`.
@@ -359,24 +359,24 @@ To update the pinned upstream revision:
 4. Remove the old checkout and build artifacts:
 
 ```bash
-pnpm --filter ai-sdk-llama-cpp clean
+bun run --filter ai-sdk-llama-cpp clean
 ```
 
 5. Fetch the new llama.cpp revision and rebuild the native addon:
 
 ```bash
-pnpm install
+bun install
 ```
 
 6. Verify the package:
 
 ```bash
-pnpm build:native
-pnpm build:ts
-pnpm test:run
+bun run build:native
+bun run build:ts
+bun run test:run
 ```
 
-If upstream API changes break the native wrapper, update `packages/ai-sdk-llama-cpp/native/llama-wrapper.cpp`, `packages/ai-sdk-llama-cpp/native/llama-wrapper.h`, and `packages/ai-sdk-llama-cpp/native/binding.cpp`, then rerun `pnpm build:native`.
+If upstream API changes break the native wrapper, update `packages/ai-sdk-llama-cpp/native/llama-wrapper.cpp`, `packages/ai-sdk-llama-cpp/native/llama-wrapper.h`, and `packages/ai-sdk-llama-cpp/native/binding.cpp`, then rerun `bun run build:native`.
 
 ## Limitations
 

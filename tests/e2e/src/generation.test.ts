@@ -8,7 +8,7 @@ import { llamaCpp, LlamaCppLanguageModel } from "ai-sdk-llama-cpp";
  * These tests require a real GGUF model file. Set the TEST_MODEL_PATH
  * environment variable to run these tests:
  *
- *   TEST_MODEL_PATH=./models/your-model.gguf pnpm test:e2e
+ *   TEST_MODEL_PATH=./models/your-model.gguf bun run test:e2e
  *
  * If TEST_MODEL_PATH is not set, these tests will be skipped.
  */
@@ -259,7 +259,7 @@ describe("E2E Test Configuration", () => {
         "\n📋 E2E tests skipped: Set TEST_MODEL_PATH to run with a real model"
       );
       console.log(
-        "   Example: TEST_MODEL_PATH=./models/model.gguf pnpm test:e2e\n"
+        "   Example: TEST_MODEL_PATH=./models/model.gguf bun run test:e2e\n"
       );
     } else {
       console.log(`\n✅ Running E2E tests with model: ${TEST_MODEL_PATH}\n`);

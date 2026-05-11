@@ -3,16 +3,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "agent": "tsx src/agent.ts",
-    "agent-tool-call": "tsx src/agent-tool-call.ts",
-    "generate-text": "tsx src/generate-text.ts",
-    "generate-text-output": "tsx src/generate-text-output.ts",
-    "stream-text": "tsx src/stream-text.ts",
-    "stream-text-reasoning": "tsx src/stream-text-reasoning.ts",
-    "chatbot": "tsx src/chatbot.ts",
-    "embed-many": "tsx src/embed-many.ts",
-    "generate-text-tool-call": "tsx src/generate-text-tool-call.ts",
-    "stream-text-tool-call": "tsx src/stream-text-tool-call.ts",
+    "agent": "bun src/agent.ts",
+    "agent-tool-call": "bun src/agent-tool-call.ts",
+    "generate-text": "bun src/generate-text.ts",
+    "generate-text-output": "bun src/generate-text-output.ts",
+    "stream-text": "bun src/stream-text.ts",
+    "stream-text-reasoning": "bun src/stream-text-reasoning.ts",
+    "chatbot": "bun src/chatbot.ts",
+    "embed-many": "bun src/embed-many.ts",
+    "generate-text-tool-call": "bun src/generate-text-tool-call.ts",
+    "stream-text-tool-call": "bun src/stream-text-tool-call.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -23,7 +23,6 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
-    "tsx": "^4.21.0",
     "typescript": "^5.3.0"
   }
 }

@@ -11,20 +11,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.10"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "pnpm"
 
       - name: Install clang-format
         run: sudo apt-get update && sudo apt-get install -y clang-format
 
       - name: Install dependencies
-        run: pnpm install --ignore-scripts
+        run: bun install --ignore-scripts
 
       - name: Check formatting
-        run: pnpm run format:check
+        run: bun run format:check

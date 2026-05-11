@@ -1,6 +1,11 @@
 {
   "name": "ai-sdk-llama-cpp-monorepo",
   "private": true,
+  "workspaces": [
+    "packages/*",
+    "examples/*",
+    "tests/*"
+  ],
   "devDependencies": {
     "@changesets/cli": "^2.29.8",
     "husky": "^9.1.7",
@@ -11,19 +16,19 @@
   "scripts": {
     "changeset": "changeset",
     "changeset:version": "changeset version",
-    "changeset:publish": "pnpm build:ts && changeset publish",
+    "changeset:publish": "bun run build:ts && changeset publish",
     "prepare": "husky",
-    "build": "pnpm -r build",
-    "build:ts": "pnpm -r build:ts",
-    "build:native": "pnpm --filter ai-sdk-llama-cpp build:native",
-    "clean": "pnpm -r clean",
-    "test": "pnpm --filter ai-sdk-llama-cpp test",
-    "test:run": "pnpm --filter ai-sdk-llama-cpp test:run",
-    "test:unit": "pnpm --filter ai-sdk-llama-cpp test:unit",
-    "test:integration": "pnpm --filter ai-sdk-llama-cpp test:integration",
-    "test:e2e": "pnpm --filter @tests/e2e test:run",
-    "test:coverage": "pnpm --filter ai-sdk-llama-cpp test:coverage",
-    "typecheck": "pnpm --filter ai-sdk-llama-cpp typecheck && pnpm --filter @examples/basic typecheck && pnpm --filter @tests/e2e typecheck",
+    "build": "bun run --filter ai-sdk-llama-cpp build",
+    "build:ts": "bun run --filter ai-sdk-llama-cpp build:ts",
+    "build:native": "bun run --filter ai-sdk-llama-cpp build:native",
+    "clean": "bun run --filter ai-sdk-llama-cpp clean",
+    "test": "bun run --filter ai-sdk-llama-cpp test",
+    "test:run": "bun run --filter ai-sdk-llama-cpp test:run",
+    "test:unit": "bun run --filter ai-sdk-llama-cpp test:unit",
+    "test:integration": "bun run --filter ai-sdk-llama-cpp test:integration",
+    "test:e2e": "bun run --filter @tests/e2e test:run",
+    "test:coverage": "bun run --filter ai-sdk-llama-cpp test:coverage",
+    "typecheck": "bun run --filter ai-sdk-llama-cpp typecheck && bun run --filter @examples/basic typecheck && bun run --filter @tests/e2e typecheck",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
     "format:check": "oxfmt --check \"packages/*/src/**/*.ts\" \"packages/*/tests/**/*.ts\" \"examples/**/*.ts\" \"tests/**/*.ts\" && clang-format --dry-run --Werror packages/ai-sdk-llama-cpp/native/*.cpp packages/ai-sdk-llama-cpp/native/*.h",
@@ -39,7 +44,8 @@
     ]
   },
   "engines": {
+    "bun": ">=1.3.10",
     "node": ">=18.0.0"
   },
-  "packageManager": "pnpm@9.15.0"
+  "packageManager": "bun@1.3.10"
 }
