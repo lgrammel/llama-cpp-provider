@@ -1,12 +1,16 @@
 import { runAgentTUI } from "@lgrammel/agent-tui";
 import { ToolLoopAgent } from "ai";
-import { gemma4_31b_it, llamaCpp } from "ai-sdk-llama-cpp";
+import { gemma4Reasoning, llamaCpp } from "ai-sdk-llama-cpp";
 import { modelPath } from "./example-model.js";
 import { reportError } from "./report-error.js";
 
 const model = llamaCpp({
   modelPath,
-  model: gemma4_31b_it,
+  model: {
+    contextSize: 65536,
+    chatTemplate: "gemma",
+    reasoning: gemma4Reasoning,
+  },
 });
 
 try {
