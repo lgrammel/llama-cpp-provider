@@ -5,6 +5,7 @@ import {
   resolveReasoningConfig,
   splitReasoningContent,
 } from "../../src/llama-cpp-language-model.js";
+import { thinkTagsReasoning } from "../../src/llama-cpp-provider-config.js";
 
 describe("convertFinishReason", () => {
   describe("known finish reasons", () => {
@@ -151,7 +152,7 @@ describe("resolveReasoningConfig", () => {
 
   it("supports think tag markers", () => {
     const result = resolveReasoningConfig({
-      format: "think-tags",
+      format: thinkTagsReasoning,
       promptPrefix: false,
     });
 

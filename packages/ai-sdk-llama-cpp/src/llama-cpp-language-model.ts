@@ -28,7 +28,10 @@ import {
   convertJsonSchemaToGrammar,
   SchemaConverter,
 } from "./json-schema-to-grammar.js";
-import type { LlamaCppReasoningConfig } from "./llama-cpp-provider-config.js";
+import {
+  gemma4Reasoning,
+  type LlamaCppReasoningConfig,
+} from "./llama-cpp-provider-config.js";
 
 export interface LlamaCppModelConfig {
   modelPath: string;
@@ -76,8 +79,6 @@ export interface ParsedReasoningPart {
   text: string;
 }
 
-const GEMMA4_REASONING_OPENING = "<|channel>thought\n";
-const GEMMA4_REASONING_CLOSING = "<channel|>";
 const GEMMA4_REASONING_PROMPT_PREFIX = "<|think|>\n";
 
 export function resolveReasoningConfig(
@@ -88,33 +89,18 @@ export function resolveReasoningConfig(
   }
 
   const config = reasoning === true ? {} : reasoning;
-  const format = config.format ?? "gemma4";
-  const markers =
-    format === "gemma4"
-      ? {
-          opening: GEMMA4_REASONING_OPENING,
-          closing: GEMMA4_REASONING_CLOSING,
-          defaultPromptPrefix: GEMMA4_REASONING_PROMPT_PREFIX,
-        }
-      : format === "think-tags"
-        ? {
-            opening: "<think>",
-            closing: "</think>",
-            defaultPromptPrefix: undefined,
-          }
-        : {
-            opening: format.opening,
-            closing: format.closing,
-            defaultPromptPrefix: undefined,
-          };
+  const format = config.format ?? gemma4Reasoning;
 
   return {
-    opening: markers.opening,
-    closing: markers.closing,
+    opening: format.opening,
+    closing: format.closing,
     promptPrefix:
       config.promptPrefix === false
         ? undefined
-        : (config.promptPrefix ?? markers.defaultPromptPrefix),
+        : (config.promptPrefix ??
+          (format === gemma4Reasoning
+            ? GEMMA4_REASONING_PROMPT_PREFIX
+            : undefined)),
   };
 }
 

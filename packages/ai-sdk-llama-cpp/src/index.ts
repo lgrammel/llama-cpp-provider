@@ -3,6 +3,8 @@ export {
   type LlamaCppProvider,
 } from "./llama-cpp-provider.js";
 export {
+  gemma4Reasoning,
+  thinkTagsReasoning,
   type LlamaCppProviderConfig,
   type LlamaCppReasoningConfig,
   type LlamaCppReasoningFormat,

@@ -1,15 +1,22 @@
-export type LlamaCppReasoningFormat =
-  | "gemma4"
-  | "think-tags"
-  | {
-      opening: string;
-      closing: string;
-    };
+export interface LlamaCppReasoningFormat {
+  opening: string;
+  closing: string;
+}
+
+export const gemma4Reasoning: LlamaCppReasoningFormat = {
+  opening: "<|channel>thought\n",
+  closing: "<channel|>",
+};
+
+export const thinkTagsReasoning: LlamaCppReasoningFormat = {
+  opening: "<think>",
+  closing: "</think>",
+};
 
 export interface LlamaCppReasoningConfig {
   /**
    * Reasoning marker format to extract from model output.
-   * Default: "gemma4" (`<|channel>thought\n...<channel|>`)
+   * Default: `gemma4Reasoning` (`<|channel>thought\n...<channel|>`)
    */
   format?: LlamaCppReasoningFormat;
   /**
