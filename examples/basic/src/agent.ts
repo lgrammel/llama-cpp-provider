@@ -11,7 +11,7 @@ const model = llamaCpp({
 
 try {
   await runAgentTUI({
-    name: "Llama.cpp Agent",
+    name: "Gemma 4 31B",
     agent: new ToolLoopAgent({
       model,
       instructions:
