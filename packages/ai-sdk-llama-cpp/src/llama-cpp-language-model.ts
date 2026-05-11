@@ -29,7 +29,6 @@ import {
   SchemaConverter,
 } from "./json-schema-to-grammar.js";
 import {
-  gemma4Reasoning,
   thinkTagsReasoning,
   type LlamaCppReasoningConfig,
 } from "./llama-cpp-provider-config.js";
@@ -79,8 +78,6 @@ export interface ParsedReasoningPart {
   text: string;
 }
 
-const GEMMA4_REASONING_PROMPT_PREFIX = "<|think|>\n";
-
 export function resolveReasoningConfig(
   reasoning?: LlamaCppReasoningConfig
 ): ResolvedReasoningConfig | undefined {
@@ -89,18 +86,15 @@ export function resolveReasoningConfig(
   }
 
   const config = reasoning;
-  const format = config.format ?? thinkTagsReasoning;
+  const defaultConfig = thinkTagsReasoning;
 
   return {
-    opening: format.opening,
-    closing: format.closing,
+    opening: config.openingMarker ?? defaultConfig.openingMarker!,
+    closing: config.closingMarker ?? defaultConfig.closingMarker!,
     promptPrefix:
       config.promptPrefix === false
         ? undefined
-        : (config.promptPrefix ??
-          (format === gemma4Reasoning
-            ? GEMMA4_REASONING_PROMPT_PREFIX
-            : undefined)),
+        : config.promptPrefix,
   };
 }
 

@@ -178,7 +178,7 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       const reasoningModel = new LlamaCppLanguageModel({
         modelPath: "/test/model.gguf",
-        reasoning: { format: gemma4Reasoning },
+        reasoning: gemma4Reasoning,
       });
 
       const result = await reasoningModel.doGenerate({
@@ -211,7 +211,7 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       const reasoningModel = new LlamaCppLanguageModel({
         modelPath: "/test/model.gguf",
-        reasoning: { format: gemma4Reasoning },
+        reasoning: gemma4Reasoning,
       });
 
       const result = await reasoningModel.doGenerate({
@@ -397,7 +397,7 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       const reasoningModel = new LlamaCppLanguageModel({
         modelPath: "/test/model.gguf",
-        reasoning: { format: gemma4Reasoning },
+        reasoning: gemma4Reasoning,
       });
 
       const { stream } = await reasoningModel.doStream({

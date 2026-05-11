@@ -151,9 +151,7 @@ describe("resolveReasoningConfig", () => {
   });
 
   it("supports Gemma 4 thinking markers", () => {
-    const result = resolveReasoningConfig({
-      format: gemma4Reasoning,
-    });
+    const result = resolveReasoningConfig(gemma4Reasoning);
 
     expect(result).toEqual({
       opening: "<|channel>thought\n",
@@ -164,7 +162,8 @@ describe("resolveReasoningConfig", () => {
 
   it("supports custom markers and prompt prefix", () => {
     const result = resolveReasoningConfig({
-      format: { opening: "[reasoning]", closing: "[/reasoning]" },
+      openingMarker: "[reasoning]",
+      closingMarker: "[/reasoning]",
       promptPrefix: "think first\n",
     });
 

@@ -1,31 +1,31 @@
-export interface LlamaCppReasoningFormat {
-  opening: string;
-  closing: string;
-}
-
-export const gemma4Reasoning: LlamaCppReasoningFormat = {
-  opening: "<|channel>thought\n",
-  closing: "<channel|>",
-};
-
-export const thinkTagsReasoning: LlamaCppReasoningFormat = {
-  opening: "<think>",
-  closing: "</think>",
-};
-
 export interface LlamaCppReasoningConfig {
   /**
-   * Reasoning marker format to extract from model output.
-   * Default: `thinkTagsReasoning` (`<think>...</think>`)
+   * Opening marker that starts reasoning content.
+   * Default: `<think>`
    */
-  format?: LlamaCppReasoningFormat;
+  openingMarker?: string;
+  /**
+   * Closing marker that ends reasoning content.
+   * Default: `</think>`
+   */
+  closingMarker?: string;
   /**
    * Prefix added to the first system prompt to enable thinking.
-   * When using `gemma4Reasoning`, defaults to `<|think|>\n`.
    * Set to false to disable prompt injection.
    */
   promptPrefix?: string | false;
 }
+
+export const gemma4Reasoning: LlamaCppReasoningConfig = {
+  openingMarker: "<|channel>thought\n",
+  closingMarker: "<channel|>",
+  promptPrefix: "<|think|>\n",
+};
+
+export const thinkTagsReasoning: LlamaCppReasoningConfig = {
+  openingMarker: "<think>",
+  closingMarker: "</think>",
+};
 
 export interface LlamaCppProviderConfig {
   /**

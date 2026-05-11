@@ -290,13 +290,21 @@ import { gemma4Reasoning, llamaCpp } from "ai-sdk-llama-cpp";
 const model = llamaCpp({
   modelPath: "./models/gemma-4-31b-it.Q4_K_M.gguf",
   chatTemplate: "gemma",
-  reasoning: {
-    format: gemma4Reasoning,
-  },
+  reasoning: gemma4Reasoning,
 });
 ```
 
-For other thinking formats, pass custom delimiters.
+For other thinking formats, pass custom delimiters:
+
+```typescript
+const model = llamaCpp({
+  modelPath: "./models/your-model.gguf",
+  reasoning: {
+    openingMarker: "[reasoning]",
+    closingMarker: "[/reasoning]",
+  },
+});
+```
 
 ### Generation Parameters
 

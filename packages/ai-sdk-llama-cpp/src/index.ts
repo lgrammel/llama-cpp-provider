@@ -7,7 +7,6 @@ export {
   thinkTagsReasoning,
   type LlamaCppProviderConfig,
   type LlamaCppReasoningConfig,
-  type LlamaCppReasoningFormat,
 } from "./llama-cpp-provider-config.js";
 export {
   LlamaCppLanguageModel,
