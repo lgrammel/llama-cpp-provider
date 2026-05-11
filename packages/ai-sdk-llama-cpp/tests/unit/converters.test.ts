@@ -5,7 +5,7 @@ import {
   resolveReasoningConfig,
   splitReasoningContent,
 } from "../../src/llama-cpp-language-model.js";
-import { gemma4Reasoning } from "../../src/llama-cpp-provider-config.js";
+import { gemma4Reasoning } from "../../src/gemma4.js";
 
 describe("convertFinishReason", () => {
   describe("known finish reasons", () => {

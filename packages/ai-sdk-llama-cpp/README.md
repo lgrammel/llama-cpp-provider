@@ -287,19 +287,18 @@ try {
 }
 ```
 
-For Gemma 4 thinking support, use `gemma4Reasoning`. The provider prepends the Gemma 4 thinking trigger (`<|think|>`) to the first system message and extracts output between `<|channel>thought\n` and `<channel|>`:
+For Gemma 4 thinking support, use the model info presets. They configure the Gemma chat template, 262K context window, and thinking markers. The provider prepends the Gemma 4 thinking trigger (`<|think|>`) to the first system message and extracts output between `<|channel>thought\n` and `<channel|>`:
 
 ```typescript
-import { gemma4Reasoning, llamaCpp } from "ai-sdk-llama-cpp";
+import { gemma4_31b_it, llamaCpp } from "ai-sdk-llama-cpp";
 
 const model = llamaCpp({
   modelPath: "./models/gemma-4-31b-it.Q4_K_M.gguf",
-  model: {
-    chatTemplate: "gemma",
-    reasoning: gemma4Reasoning,
-  },
+  model: gemma4_31b_it,
 });
 ```
+
+The package also exports `gemma4_26b_a4b` for Gemma 4 26B-A4B IT models.
 
 For other thinking formats, pass custom delimiters:
 

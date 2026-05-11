@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { gemma4_31b_it } from "ai-sdk-llama-cpp";
 
 export const modelPath = join(
   homedir(),
@@ -8,10 +9,5 @@ export const modelPath = join(
 
 export const modelOptions = {
   modelPath,
-  model: {
-    chatTemplate: "gemma",
-    reasoning: {
-      promptPrefix: false as const,
-    },
-  },
+  model: gemma4_31b_it,
 };

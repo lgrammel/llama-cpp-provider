@@ -16,12 +16,6 @@ export interface LlamaCppReasoningConfig {
   promptPrefix?: string | false;
 }
 
-export const gemma4Reasoning: LlamaCppReasoningConfig = {
-  openingMarker: "<|channel>thought\n",
-  closingMarker: "<channel|>",
-  promptPrefix: "<|think|>\n",
-};
-
 export const thinkTagsReasoning: LlamaCppReasoningConfig = {
   openingMarker: "<think>",
   closingMarker: "</think>",

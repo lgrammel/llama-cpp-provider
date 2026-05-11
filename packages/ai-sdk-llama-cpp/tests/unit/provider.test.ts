@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  gemma4Reasoning,
+  gemma4_31b_it,
+  gemma4_26b_a4b,
   llamaCpp,
   LlamaCppLanguageModel,
 } from "../../src/index.js";
@@ -40,22 +41,31 @@ describe("llamaCpp", () => {
     it("passes nested model-specific options through", () => {
       const model = llamaCpp({
         modelPath: "/path/to/model.gguf",
-        model: {
-          contextSize: 4096,
-          chatTemplate: "gemma",
-          reasoning: gemma4Reasoning,
-        },
+        model: gemma4_31b_it,
       });
 
       expect(model).toHaveProperty("config", {
         modelPath: "/path/to/model.gguf",
-        contextSize: 4096,
+        contextSize: 262144,
         gpuLayers: undefined,
         threads: undefined,
         debug: undefined,
         chatTemplate: "gemma",
-        reasoning: gemma4Reasoning,
+        reasoning: gemma4_31b_it.reasoning,
       });
+    });
+
+    it("exports full Gemma 4 model info presets", () => {
+      expect(gemma4_31b_it).toEqual({
+        contextSize: 262144,
+        chatTemplate: "gemma",
+        reasoning: expect.objectContaining({
+          openingMarker: "<|channel>thought\n",
+          closingMarker: "<channel|>",
+          promptPrefix: "<|think|>\n",
+        }),
+      });
+      expect(gemma4_26b_a4b).toEqual(gemma4_31b_it);
     });
 
     it("handles minimal config with only modelPath", () => {
