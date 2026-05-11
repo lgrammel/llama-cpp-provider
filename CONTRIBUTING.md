@@ -55,6 +55,8 @@ The `pnpm install` step automatically compiles llama.cpp and builds the native N
 | `pnpm test:unit` | Run unit tests only |
 | `pnpm test:integration` | Run integration tests only |
 | `pnpm test:e2e` | Run E2E tests (requires `TEST_MODEL_PATH`) |
+| `pnpm lint` | Check TypeScript with oxlint |
+| `pnpm lint:fix` | Fix auto-fixable oxlint issues |
 | `pnpm format:check` | Check code formatting |
 | `pnpm format:fix` | Fix code formatting |
 
@@ -79,7 +81,7 @@ pnpm generate-text
 2. **Create a feature branch**: `git checkout -b my-feature`
 3. **Make your changes**
 4. **Run tests**: `pnpm test:run`
-5. **Run the formatter**: `pnpm format:fix`
+5. **Run the linter and formatter**: `pnpm lint && pnpm format:fix`
 6. **Add a changeset** (if applicable): `pnpm changeset`
 7. **Commit your changes** with a descriptive message
 8. **Push to your fork** and open a pull request

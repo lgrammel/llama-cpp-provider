@@ -3,7 +3,8 @@
   "private": true,
   "devDependencies": {
     "@changesets/cli": "^2.29.8",
-    "prettier": "^3.4.2"
+    "oxfmt": "^0.48.0",
+    "oxlint": "^1.63.0"
   },
   "scripts": {
     "changeset": "changeset",
@@ -20,8 +21,10 @@
     "test:e2e": "pnpm --filter @tests/e2e test:run",
     "test:coverage": "pnpm --filter ai-sdk-llama-cpp test:coverage",
     "typecheck": "pnpm --filter ai-sdk-llama-cpp typecheck && pnpm --filter @examples/basic typecheck && pnpm --filter @tests/e2e typecheck",
-    "format:check": "prettier --check \"packages/*/src/**/*.ts\" \"packages/*/tests/**/*.ts\" \"examples/**/*.ts\" \"tests/**/*.ts\" && clang-format --dry-run --Werror packages/ai-sdk-llama-cpp/native/*.cpp packages/ai-sdk-llama-cpp/native/*.h",
-    "format:fix": "prettier --write \"packages/*/src/**/*.ts\" \"packages/*/tests/**/*.ts\" \"examples/**/*.ts\" \"tests/**/*.ts\" && clang-format -i packages/ai-sdk-llama-cpp/native/*.cpp packages/ai-sdk-llama-cpp/native/*.h"
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "format:check": "oxfmt --check \"packages/*/src/**/*.ts\" \"packages/*/tests/**/*.ts\" \"examples/**/*.ts\" \"tests/**/*.ts\" && clang-format --dry-run --Werror packages/ai-sdk-llama-cpp/native/*.cpp packages/ai-sdk-llama-cpp/native/*.h",
+    "format:fix": "oxfmt --write \"packages/*/src/**/*.ts\" \"packages/*/tests/**/*.ts\" \"examples/**/*.ts\" \"tests/**/*.ts\" && clang-format -i packages/ai-sdk-llama-cpp/native/*.cpp packages/ai-sdk-llama-cpp/native/*.h"
   },
   "engines": {
     "node": ">=18.0.0"

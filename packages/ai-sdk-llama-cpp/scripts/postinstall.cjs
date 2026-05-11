@@ -15,7 +15,7 @@ if (process.platform !== "darwin") {
 // Step 2: Check if git is available
 try {
   execSync("git --version", { stdio: "ignore" });
-} catch (error) {
+} catch {
   console.error("\n===========================================");
   console.error("ERROR: git is required but not found");
   console.error("===========================================\n");

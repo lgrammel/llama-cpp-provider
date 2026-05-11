@@ -198,10 +198,13 @@ describeE2E("E2E Structured Output Tests", () => {
       expect(Array.isArray(output!.ingredients)).toBe(true);
       expect(Array.isArray(output!.steps)).toBe(true);
 
-      if (output!.ingredients.length > 0) {
-        expect(typeof output!.ingredients[0].name).toBe("string");
-        expect(typeof output!.ingredients[0].amount).toBe("string");
-      }
+      expect(
+        output!.ingredients.every(
+          (ingredient) =>
+            typeof ingredient.name === "string" &&
+            typeof ingredient.amount === "string"
+        )
+      ).toBe(true);
     });
   });
 

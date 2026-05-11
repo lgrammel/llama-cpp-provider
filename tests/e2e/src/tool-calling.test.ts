@@ -89,7 +89,6 @@ describeE2E("E2E Tool Calling Tests", () => {
 
     it("executes tool and returns result", { timeout: 120000 }, async () => {
       let toolWasCalled = false;
-      let receivedCity = "";
 
       const result = await generateText({
         model,
@@ -104,7 +103,6 @@ describeE2E("E2E Tool Calling Tests", () => {
             }),
             execute: async ({ city }) => {
               toolWasCalled = true;
-              receivedCity = city;
               const normalizedCity = city.toLowerCase();
               return (
                 weatherData[normalizedCity] || {
@@ -121,16 +119,12 @@ describeE2E("E2E Tool Calling Tests", () => {
       // Note: Success depends on model quality
       expect(result).toBeDefined();
 
-      if (result.steps && result.steps.length > 0) {
-        // Check if any step had tool calls
-        const hasToolCalls = result.steps.some(
-          (step) => step.toolCalls && step.toolCalls.length > 0
-        );
+      // Check if any step had tool calls
+      const hasToolCalls = result.steps?.some(
+        (step) => step.toolCalls && step.toolCalls.length > 0
+      );
 
-        if (hasToolCalls) {
-          expect(toolWasCalled).toBe(true);
-        }
-      }
+      expect(toolWasCalled).toBe(hasToolCalls === true);
     });
 
     it(
@@ -187,12 +181,10 @@ describeE2E("E2E Tool Calling Tests", () => {
       // With toolChoice: none, model should not call tools
       expect(result.text.length).toBeGreaterThan(0);
       // Should not have tool calls when toolChoice is none
-      if (result.steps && result.steps.length > 0) {
-        const hasToolCalls = result.steps.some(
-          (step) => step.toolCalls && step.toolCalls.length > 0
-        );
-        expect(hasToolCalls).toBe(false);
-      }
+      const hasToolCalls = result.steps?.some(
+        (step) => step.toolCalls && step.toolCalls.length > 0
+      );
+      expect(hasToolCalls).not.toBe(true);
     });
   });
 
@@ -216,9 +208,24 @@ describeE2E("E2E Tool Calling Tests", () => {
                 .describe("The math expression to evaluate"),
             }),
             execute: async ({ expression }) => {
-              // Safe evaluation for simple expressions
-              const result = eval(expression);
-              return { result };
+              const match = expression.match(
+                /^\s*(-?\d+(?:\.\d+)?)\s*([+\-*/])\s*(-?\d+(?:\.\d+)?)\s*$/
+              );
+              if (!match) {
+                return { error: "Unsupported expression" };
+              }
+
+              const left = Number(match[1]);
+              const right = Number(match[3]);
+              const calculatorResult =
+                match[2] === "+"
+                  ? left + right
+                  : match[2] === "-"
+                    ? left - right
+                    : match[2] === "*"
+                      ? left * right
+                      : left / right;
+              return { result: calculatorResult };
             },
           }),
         },

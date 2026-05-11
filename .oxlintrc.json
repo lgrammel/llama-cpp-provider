@@ -1,0 +1,27 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "env": {
+    "node": true,
+    "es2022": true
+  },
+  "plugins": ["typescript", "vitest"],
+  "rules": {
+    "eslint/no-underscore-dangle": "off",
+    "eslint/preserve-caught-error": "off",
+    "typescript/no-this-alias": "off",
+    "vitest/require-mock-type-parameters": "off"
+  },
+  "ignorePatterns": [
+    "dist/**",
+    "build/**",
+    "llama.cpp/**",
+    "node_modules/**",
+    "packages/*/dist/**",
+    "packages/*/build/**",
+    "packages/*/llama.cpp/**"
+  ]
+}
