@@ -30,6 +30,7 @@ import {
 } from "./json-schema-to-grammar.js";
 import {
   gemma4Reasoning,
+  thinkTagsReasoning,
   type LlamaCppReasoningConfig,
 } from "./llama-cpp-provider-config.js";
 
@@ -55,9 +56,8 @@ export interface LlamaCppModelConfig {
   chatTemplate?: string;
   /**
    * Extract model thinking into AI SDK reasoning parts.
-   * Set to true for Gemma 4 thinking support.
    */
-  reasoning?: boolean | LlamaCppReasoningConfig;
+  reasoning?: LlamaCppReasoningConfig;
 }
 
 export interface LlamaCppGenerationConfig {
@@ -82,14 +82,14 @@ export interface ParsedReasoningPart {
 const GEMMA4_REASONING_PROMPT_PREFIX = "<|think|>\n";
 
 export function resolveReasoningConfig(
-  reasoning?: boolean | LlamaCppReasoningConfig
+  reasoning?: LlamaCppReasoningConfig
 ): ResolvedReasoningConfig | undefined {
   if (!reasoning) {
     return undefined;
   }
 
-  const config = reasoning === true ? {} : reasoning;
-  const format = config.format ?? gemma4Reasoning;
+  const config = reasoning;
+  const format = config.format ?? thinkTagsReasoning;
 
   return {
     opening: format.opening,

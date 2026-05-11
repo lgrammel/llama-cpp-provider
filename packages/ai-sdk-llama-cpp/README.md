@@ -241,8 +241,8 @@ const model = llamaCpp({
   chatTemplate: "auto",
 
   // Optional: Extract model thinking into AI SDK reasoning parts.
-  // Set to true for Gemma 4 thinking support.
-  reasoning: true,
+  // Defaults to <think>...</think> markers.
+  reasoning: {},
 });
 ```
 
@@ -258,16 +258,15 @@ The `chatTemplate` option controls how messages are formatted before being sent 
 
 #### Reasoning / Thinking
 
-Set `reasoning: true` to enable Gemma 4 thinking support. The provider prepends the Gemma 4 thinking trigger (`<|think|>`) to the first system message and extracts output between `<|channel>thought\n` and `<channel|>` into AI SDK `reasoning` parts.
+Set `reasoning: {}` to extract output between `<think>` and `</think>` into AI SDK `reasoning` parts.
 
 ```typescript
 import { generateText } from "ai";
 import { llamaCpp } from "ai-sdk-llama-cpp";
 
 const model = llamaCpp({
-  modelPath: "./models/gemma-4-31b-it.Q4_K_M.gguf",
-  chatTemplate: "gemma",
-  reasoning: true,
+  modelPath: "./models/your-model.gguf",
+  reasoning: {},
 });
 
 try {
@@ -283,17 +282,21 @@ try {
 }
 ```
 
-For other thinking formats, pass custom delimiters:
+For Gemma 4 thinking support, use `gemma4Reasoning`. The provider prepends the Gemma 4 thinking trigger (`<|think|>`) to the first system message and extracts output between `<|channel>thought\n` and `<channel|>`:
 
 ```typescript
+import { gemma4Reasoning, llamaCpp } from "ai-sdk-llama-cpp";
+
 const model = llamaCpp({
-  modelPath: "./models/your-model.gguf",
+  modelPath: "./models/gemma-4-31b-it.Q4_K_M.gguf",
+  chatTemplate: "gemma",
   reasoning: {
-    format: { opening: "<think>", closing: "</think>" },
-    promptPrefix: false,
+    format: gemma4Reasoning,
   },
 });
 ```
+
+For other thinking formats, pass custom delimiters.
 
 ### Generation Parameters
 
@@ -346,7 +349,7 @@ Creates a new llama.cpp language model instance.
 - `config.threads` (number, optional): CPU threads. Default: 4
 - `config.debug` (boolean, optional): Enable verbose llama.cpp output. Default: false
 - `config.chatTemplate` (string, optional): Chat template to use for formatting messages. Default: "auto"
-- `config.reasoning` (boolean | object, optional): Extract thinking into AI SDK reasoning parts. `true` uses Gemma 4 markers.
+- `config.reasoning` (object, optional): Extract thinking into AI SDK reasoning parts. Defaults to `<think>...</think>` markers when set to `{}`.
 
 **Returns:** `LlamaCppLanguageModel` - A language model compatible with the Vercel AI SDK
 

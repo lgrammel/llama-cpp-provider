@@ -30,6 +30,7 @@ vi.mock("../../src/native-binding.js", () => ({
 // Import after mocking
 import { LlamaCppLanguageModel } from "../../src/llama-cpp-language-model.js";
 import * as nativeBinding from "../../src/native-binding.js";
+import { gemma4Reasoning } from "../../src/llama-cpp-provider-config.js";
 
 describe("LlamaCppLanguageModel Integration", () => {
   let model: LlamaCppLanguageModel;
@@ -177,7 +178,7 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       const reasoningModel = new LlamaCppLanguageModel({
         modelPath: "/test/model.gguf",
-        reasoning: true,
+        reasoning: { format: gemma4Reasoning },
       });
 
       const result = await reasoningModel.doGenerate({
@@ -210,7 +211,7 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       const reasoningModel = new LlamaCppLanguageModel({
         modelPath: "/test/model.gguf",
-        reasoning: true,
+        reasoning: { format: gemma4Reasoning },
       });
 
       const result = await reasoningModel.doGenerate({
@@ -396,7 +397,7 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       const reasoningModel = new LlamaCppLanguageModel({
         modelPath: "/test/model.gguf",
-        reasoning: true,
+        reasoning: { format: gemma4Reasoning },
       });
 
       const { stream } = await reasoningModel.doStream({

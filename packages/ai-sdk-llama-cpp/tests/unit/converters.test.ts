@@ -5,7 +5,7 @@ import {
   resolveReasoningConfig,
   splitReasoningContent,
 } from "../../src/llama-cpp-language-model.js";
-import { thinkTagsReasoning } from "../../src/llama-cpp-provider-config.js";
+import { gemma4Reasoning } from "../../src/llama-cpp-provider-config.js";
 
 describe("convertFinishReason", () => {
   describe("known finish reasons", () => {
@@ -140,26 +140,25 @@ describe("convertUsage", () => {
 });
 
 describe("resolveReasoningConfig", () => {
-  it("defaults to Gemma 4 thinking markers", () => {
-    const result = resolveReasoningConfig(true);
-
-    expect(result).toEqual({
-      opening: "<|channel>thought\n",
-      closing: "<channel|>",
-      promptPrefix: "<|think|>\n",
-    });
-  });
-
-  it("supports think tag markers", () => {
-    const result = resolveReasoningConfig({
-      format: thinkTagsReasoning,
-      promptPrefix: false,
-    });
+  it("defaults to think tag markers", () => {
+    const result = resolveReasoningConfig({});
 
     expect(result).toEqual({
       opening: "<think>",
       closing: "</think>",
       promptPrefix: undefined,
+    });
+  });
+
+  it("supports Gemma 4 thinking markers", () => {
+    const result = resolveReasoningConfig({
+      format: gemma4Reasoning,
+    });
+
+    expect(result).toEqual({
+      opening: "<|channel>thought\n",
+      closing: "<channel|>",
+      promptPrefix: "<|think|>\n",
     });
   });
 

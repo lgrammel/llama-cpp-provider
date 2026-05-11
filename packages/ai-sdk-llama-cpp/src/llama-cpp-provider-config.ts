@@ -16,12 +16,13 @@ export const thinkTagsReasoning: LlamaCppReasoningFormat = {
 export interface LlamaCppReasoningConfig {
   /**
    * Reasoning marker format to extract from model output.
-   * Default: `gemma4Reasoning` (`<|channel>thought\n...<channel|>`)
+   * Default: `thinkTagsReasoning` (`<think>...</think>`)
    */
   format?: LlamaCppReasoningFormat;
   /**
    * Prefix added to the first system prompt to enable thinking.
-   * Gemma 4 defaults to `<|think|>\n`. Set to false to disable prompt injection.
+   * When using `gemma4Reasoning`, defaults to `<|think|>\n`.
+   * Set to false to disable prompt injection.
    */
   promptPrefix?: string | false;
 }
@@ -62,7 +63,6 @@ export interface LlamaCppProviderConfig {
 
   /**
    * Extract model thinking into AI SDK reasoning parts.
-   * Set to true for Gemma 4 (`<|channel>thought\n...<channel|>`) support.
    */
-  reasoning?: boolean | LlamaCppReasoningConfig;
+  reasoning?: LlamaCppReasoningConfig;
 }
