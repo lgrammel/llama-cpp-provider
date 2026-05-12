@@ -98,15 +98,17 @@ interface NativeBinding {
 }
 
 export function loadModel(options: LoadModelOptions): Promise<number> {
+  const nativeOptions = omitUndefinedLoadModelOptions(options);
+
   return Promise.all([
-    validateModelPath(options.modelPath, "modelPath"),
-    options.mmprojPath
-      ? validateModelPath(options.mmprojPath, "mmprojPath")
+    validateModelPath(nativeOptions.modelPath, "modelPath"),
+    nativeOptions.mmprojPath
+      ? validateModelPath(nativeOptions.mmprojPath, "mmprojPath")
       : undefined,
   ]).then(
     () =>
       new Promise((resolve, reject) => {
-        binding.loadModel(options, (error, handle) => {
+        binding.loadModel(nativeOptions, (error, handle) => {
           if (error) {
             reject(new Error(error));
           } else if (handle !== null) {
@@ -117,6 +119,38 @@ export function loadModel(options: LoadModelOptions): Promise<number> {
         });
       })
   );
+}
+
+function omitUndefinedLoadModelOptions(
+  options: LoadModelOptions
+): LoadModelOptions {
+  const nativeOptions: LoadModelOptions = {
+    modelPath: options.modelPath,
+  };
+
+  if (options.mmprojPath !== undefined) {
+    nativeOptions.mmprojPath = options.mmprojPath;
+  }
+  if (options.gpuLayers !== undefined) {
+    nativeOptions.gpuLayers = options.gpuLayers;
+  }
+  if (options.contextSize !== undefined) {
+    nativeOptions.contextSize = options.contextSize;
+  }
+  if (options.threads !== undefined) {
+    nativeOptions.threads = options.threads;
+  }
+  if (options.debug !== undefined) {
+    nativeOptions.debug = options.debug;
+  }
+  if (options.chatTemplate !== undefined) {
+    nativeOptions.chatTemplate = options.chatTemplate;
+  }
+  if (options.embedding !== undefined) {
+    nativeOptions.embedding = options.embedding;
+  }
+
+  return nativeOptions;
 }
 
 async function validateModelPath(
