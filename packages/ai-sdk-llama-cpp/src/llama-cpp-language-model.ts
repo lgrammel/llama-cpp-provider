@@ -780,13 +780,16 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
     this.initPromise = (async () => {
       const options: LoadModelOptions = {
         modelPath: this.config.modelPath,
-        mmprojPath: this.config.mmprojPath,
         contextSize: this.config.contextSize ?? 2048,
         gpuLayers: this.config.gpuLayers ?? 99,
         threads: this.config.threads ?? 4,
         debug: this.config.debug ?? false,
         chatTemplate: this.config.chatTemplate ?? "auto",
       };
+
+      if (this.config.mmprojPath !== undefined) {
+        options.mmprojPath = this.config.mmprojPath;
+      }
 
       this.modelHandle = await loadModel(options);
     })();

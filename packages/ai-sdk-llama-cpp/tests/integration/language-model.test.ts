@@ -570,6 +570,25 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       await minimalModel.dispose();
     });
+
+    it("omits undefined optional native load options", async () => {
+      const modelWithoutMmproj = new LlamaCppLanguageModel({
+        modelPath: "/minimal.gguf",
+        mmprojPath: undefined,
+      });
+
+      await modelWithoutMmproj.doGenerate({
+        prompt: [{ role: "user", content: [{ type: "text", text: "test" }] }],
+      });
+
+      expect(nativeBinding.loadModel).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          mmprojPath: undefined,
+        })
+      );
+
+      await modelWithoutMmproj.dispose();
+    });
   });
 
   describe("dispose", () => {
