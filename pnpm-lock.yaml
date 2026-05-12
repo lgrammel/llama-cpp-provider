@@ -27,8 +27,8 @@ importers:
   examples/basic:
     dependencies:
       '@lgrammel/agent-tui':
-        specifier: ^0.0.5
-        version: 0.0.5(typescript@5.9.3)(zod@4.3.5)
+        specifier: ^0.1.0
+        version: 0.1.0(typescript@5.9.3)(zod@4.3.5)
       ai:
         specifier: 7.0.0-canary.130
         version: 7.0.0-canary.130(zod@4.3.5)
@@ -369,8 +369,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@lgrammel/agent-tui@0.0.5':
-    resolution: {integrity: sha512-1Gz0NMApRW6JZ4llckDZ1zpD2LUov2htoEhlMcOsMJf8kgtpA4aYeIY1yagFc93s+mFwZk9R8SKgUtfyPRtWLw==}
+  '@lgrammel/agent-tui@0.1.0':
+    resolution: {integrity: sha512-2mvDlAn4MeiSs/QgP6hKdUvFq/cVtGdZrC46z+WJPysbY4nKCGBVo7OOPL4pMvCQzBspRJv4BITfmn4XIVDisQ==}
     peerDependencies:
       typescript: ^5
 
@@ -2093,7 +2093,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@lgrammel/agent-tui@0.0.5(typescript@5.9.3)(zod@4.3.5)':
+  '@lgrammel/agent-tui@0.1.0(typescript@5.9.3)(zod@4.3.5)':
     dependencies:
       ai: 7.0.0-canary.130(zod@4.3.5)
       typescript: 5.9.3

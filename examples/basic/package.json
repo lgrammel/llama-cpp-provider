@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@lgrammel/agent-tui": "^0.0.5",
+    "@lgrammel/agent-tui": "^0.1.0",
     "ai": "7.0.0-canary.130",
     "ai-sdk-llama-cpp": "workspace:*",
     "zod": "^4.3.5"
