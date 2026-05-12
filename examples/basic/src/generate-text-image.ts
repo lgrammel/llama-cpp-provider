@@ -34,7 +34,9 @@ const model = llamaCpp({
   modelPath,
   mmprojPath,
   contextSize: exampleContextSize,
-  model: exampleModel,
+  model: {
+    chatTemplate: exampleModel.chatTemplate,
+  },
 });
 
 try {
@@ -44,7 +46,7 @@ try {
       {
         role: "user",
         content: [
-          { type: "text", text: "Describe this image." },
+          { type: "text", text: "Describe this image in one short sentence." },
           {
             type: "file",
             data: {
@@ -56,7 +58,7 @@ try {
         ],
       },
     ],
-    maxOutputTokens: 256,
+    maxOutputTokens: 128,
   });
 
   console.log(text);
