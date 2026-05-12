@@ -183,6 +183,18 @@ export function resolveReasoningConfig(
   };
 }
 
+function resolveCallReasoningConfig(
+  options: LanguageModelV4CallOptions,
+  modelReasoning: LlamaCppReasoningConfig | undefined,
+  grammar: string | undefined
+): ResolvedReasoningConfig | undefined {
+  if (grammar || options.reasoning === "none") {
+    return undefined;
+  }
+
+  return resolveReasoningConfig(modelReasoning ?? {});
+}
+
 export function splitReasoningContent(
   text: string,
   reasoning: Pick<ResolvedReasoningConfig, "opening" | "closing">
@@ -844,9 +856,11 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       );
     }
 
-    const reasoningConfig = grammar
-      ? undefined
-      : resolveReasoningConfig(this.config.reasoning);
+    const reasoningConfig = resolveCallReasoningConfig(
+      options,
+      this.config.reasoning,
+      grammar
+    );
 
     // Extract function tools from the tools array
     const functionTools =
@@ -946,9 +960,11 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       );
     }
 
-    const reasoningConfig = grammar
-      ? undefined
-      : resolveReasoningConfig(this.config.reasoning);
+    const reasoningConfig = resolveCallReasoningConfig(
+      options,
+      this.config.reasoning,
+      grammar
+    );
 
     // Extract function tools from the tools array
     const functionTools =

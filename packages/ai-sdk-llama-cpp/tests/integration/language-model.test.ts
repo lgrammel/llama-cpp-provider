@@ -200,6 +200,81 @@ describe("LlamaCppLanguageModel Integration", () => {
       );
     });
 
+    it("extracts default think-tag reasoning when reasoning is omitted", async () => {
+      vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
+        text: "<think>Think first.</think>Final answer.",
+        promptTokens: 50,
+        completionTokens: 12,
+        finishReason: "stop",
+      });
+
+      const result = await model.doGenerate({
+        prompt: testMessages,
+      });
+
+      expect(result.content).toEqual([
+        {
+          type: "reasoning",
+          text: "Think first.",
+          providerMetadata: undefined,
+        },
+        {
+          type: "text",
+          text: "Final answer.",
+          providerMetadata: undefined,
+        },
+      ]);
+    });
+
+    it('disables reasoning extraction when reasoning is "none"', async () => {
+      vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
+        text: "<think>Hidden thinking.</think>Visible answer.",
+        promptTokens: 50,
+        completionTokens: 12,
+        finishReason: "stop",
+      });
+
+      const result = await model.doGenerate({
+        prompt: testMessages,
+        reasoning: "none",
+      });
+
+      expect(result.content).toEqual([
+        {
+          type: "text",
+          text: "<think>Hidden thinking.</think>Visible answer.",
+          providerMetadata: undefined,
+        },
+      ]);
+    });
+
+    it('enables reasoning extraction for non-"none" reasoning values', async () => {
+      vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
+        text: "<think>Use more effort.</think>Better answer.",
+        promptTokens: 50,
+        completionTokens: 12,
+        finishReason: "stop",
+      });
+
+      const result = await model.doGenerate({
+        prompt: testMessages,
+        reasoning: "high",
+      });
+
+      expect(result.content).toEqual([
+        {
+          type: "reasoning",
+          text: "Use more effort.",
+          providerMetadata: undefined,
+        },
+        {
+          type: "text",
+          text: "Better answer.",
+          providerMetadata: undefined,
+        },
+      ]);
+    });
+
     it("returns Gemma 4 thinking as reasoning content", async () => {
       vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
         text: "<|channel>thought\nI should answer briefly.<channel|>Hello!",
