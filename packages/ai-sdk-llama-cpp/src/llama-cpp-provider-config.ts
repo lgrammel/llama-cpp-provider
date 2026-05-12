@@ -42,6 +42,13 @@ export interface LlamaCppProviderConfig {
   modelPath: string;
 
   /**
+   * Path to the multimodal projector GGUF file.
+   *
+   * Required when passing image inputs to language model calls.
+   */
+  mmprojPath?: string;
+
+  /**
    * Model-specific metadata such as chat template and reasoning format.
    */
   model?: LlamaCppModelInfo;

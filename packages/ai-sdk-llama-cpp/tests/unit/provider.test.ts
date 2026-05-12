@@ -42,12 +42,14 @@ describe("llamaCpp", () => {
     it("passes nested model-specific options through", () => {
       const model = llamaCpp({
         modelPath: "/path/to/model.gguf",
+        mmprojPath: "/path/to/mmproj.gguf",
         contextSize: 4096,
         model: gemma4_31b_it,
       });
 
       expect(model).toHaveProperty("config", {
         modelPath: "/path/to/model.gguf",
+        mmprojPath: "/path/to/mmproj.gguf",
         contextSize: 4096,
         gpuLayers: undefined,
         threads: undefined,

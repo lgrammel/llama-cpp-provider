@@ -10,12 +10,15 @@
 struct llama_model;
 struct llama_context;
 struct llama_sampler;
+struct mtmd_context;
 
 namespace llama_wrapper {
 
 struct ModelParams {
   std::string model_path;
+  std::string mmproj_path;
   int n_gpu_layers = 99; // Use GPU by default if available
+  int n_threads = 4;
   bool use_mmap = true;
   bool use_mlock = false;
   bool debug = false; // Show verbose llama.cpp output
@@ -26,6 +29,7 @@ struct ModelParams {
 struct ChatMessage {
   std::string role;
   std::string content;
+  std::vector<std::vector<unsigned char>> images;
 };
 
 struct ContextParams {
@@ -107,7 +111,9 @@ private:
   llama_model *model_ = nullptr;
   llama_context *ctx_ = nullptr;
   llama_sampler *sampler_ = nullptr;
+  mtmd_context *mtmd_ctx_ = nullptr;
   std::string model_path_;
+  std::string mmproj_path_;
   std::string chat_template_;
   int n_batch_ = 512; // Batch size for prompt processing
 
@@ -125,6 +131,11 @@ private:
 
   // Check if token is end-of-sequence
   bool is_eos_token(int32_t token);
+
+  // Prefill the prompt into the context and return the number of consumed positions.
+  bool prefill_prompt(const std::string &prompt,
+                      const std::vector<std::vector<unsigned char>> &images,
+                      GenerationResult &result, int &n_past);
 };
 
 } // namespace llama_wrapper

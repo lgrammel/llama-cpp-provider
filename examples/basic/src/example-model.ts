@@ -7,6 +7,11 @@ export const modelPath = join(
   "opt/models/lmstudio-community/gemma-4-31B-it-GGUF/gemma-4-31B-it-Q4_K_M.gguf"
 );
 
+export const mmprojPath = join(
+  homedir(),
+  "opt/models/lmstudio-community/gemma-4-31B-it-GGUF/mmproj-gemma-4-31B-it-BF16.gguf"
+);
+
 export const exampleModel = {
   ...gemma4_31b_it,
 };

@@ -210,6 +210,8 @@ import { llamaCpp } from "ai-sdk-llama-cpp";
 // Create model instance with config
 const model = llamaCpp({ 
   modelPath: "./models/your-model.gguf",
+ // Optional for image inputs with multimodal models:
+ // mmprojPath: "./models/your-mmproj.gguf",
  // Optional load config: contextSize, gpuLayers, threads, debug
  // Optional model info: model.chatTemplate, model.reasoning
 });

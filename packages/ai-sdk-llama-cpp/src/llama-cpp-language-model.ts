@@ -36,6 +36,12 @@ import {
 export interface LlamaCppModelConfig {
   modelPath: string;
   /**
+   * Path to the multimodal projector GGUF file.
+   *
+   * Required when image/file parts are included in user messages.
+   */
+  mmprojPath?: string;
+  /**
    * Maximum context size.
    *
    * This setting is highly dependent on the model and the memory available on
@@ -79,6 +85,73 @@ interface ResolvedReasoningConfig {
   opening: string;
   closing: string;
   promptPrefix?: string;
+}
+
+const mediaMarker = "<__media__>";
+
+function isImageMediaType(mediaType?: string): boolean {
+  const normalized = mediaType?.toLowerCase();
+  return normalized === "image" || normalized?.startsWith("image/") === true;
+}
+
+function decodeBase64(base64: string): Uint8Array {
+  return Uint8Array.from(Buffer.from(base64, "base64"));
+}
+
+function parseDataUrl(url: string): { data: Uint8Array; mediaType?: string } {
+  const match = url.match(/^data:([^;,]+)?(?:;[^,]*)?;base64,(.*)$/s);
+  if (!match) {
+    throw new Error(
+      "Unsupported image data URL. Only base64-encoded data URLs are supported."
+    );
+  }
+
+  return {
+    mediaType: match[1],
+    data: decodeBase64(match[2]),
+  };
+}
+
+function toImageData(
+  part: Extract<LanguageModelV4Message, { role: "user" }>["content"][number]
+): { data: Uint8Array; mediaType?: string } | undefined {
+  if (part.type !== "file") {
+    return undefined;
+  }
+
+  if (!isImageMediaType(part.mediaType)) {
+    return undefined;
+  }
+
+  if (part.data.type === "data" && part.data.data instanceof Uint8Array) {
+    return {
+      data: part.data.data,
+      mediaType: part.mediaType,
+    };
+  }
+
+  if (part.data.type === "data" && typeof part.data.data === "string") {
+    return {
+      data: decodeBase64(part.data.data),
+      mediaType: part.mediaType,
+    };
+  }
+
+  if (part.data.type === "url") {
+    if (part.data.url.protocol === "data:") {
+      return parseDataUrl(part.data.url.href);
+    }
+    if (part.data.url.protocol !== "file:") {
+      throw new Error(
+        `Unsupported image URL protocol: ${part.data.url.protocol}. Use data URLs or Uint8Array data.`
+      );
+    }
+    throw new Error(
+      "File URL image inputs must be loaded by the AI SDK before reaching this provider."
+    );
+  }
+
+  return undefined;
 }
 
 export interface ParsedReasoningPart {
@@ -557,17 +630,28 @@ export function convertMessages(
         });
         break;
       case "user":
-        // Extract text content from user messages
+        // Preserve ordered text and image parts for libmtmd. The native layer
+        // replaces each media marker with the corresponding image embedding.
         let userContent = "";
+        const images: ChatMessage["images"] = [];
         for (const part of message.content) {
           if (part.type === "text") {
             userContent += part.text;
+          } else if (part.type === "file") {
+            const image = toImageData(part);
+            if (image) {
+              if (userContent.length > 0 && !/\s$/.test(userContent)) {
+                userContent += "\n";
+              }
+              userContent += mediaMarker;
+              images.push(image);
+            }
           }
-          // Note: File parts are not supported in this implementation
         }
         addMessage({
           role: "user",
           content: userContent,
+          ...(images.length > 0 ? { images } : {}),
         });
         break;
       case "assistant":
@@ -696,6 +780,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
     this.initPromise = (async () => {
       const options: LoadModelOptions = {
         modelPath: this.config.modelPath,
+        mmprojPath: this.config.mmprojPath,
         contextSize: this.config.contextSize ?? 2048,
         gpuLayers: this.config.gpuLayers ?? 99,
         threads: this.config.threads ?? 4,

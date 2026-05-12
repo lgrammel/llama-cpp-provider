@@ -20,6 +20,29 @@ endif()
 # Add llama.cpp subdirectory
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp ${CMAKE_CURRENT_BINARY_DIR}/llama.cpp)
 
+# Build libmtmd without enabling the llama.cpp tools bundle.
+file(GLOB MTMD_MODEL_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/tools/mtmd/models/*.cpp
+)
+add_library(mtmd STATIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/tools/mtmd/mtmd.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/tools/mtmd/mtmd-audio.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/tools/mtmd/mtmd-image.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/tools/mtmd/mtmd-helper.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/tools/mtmd/clip.cpp
+    ${MTMD_MODEL_SOURCES}
+)
+target_link_libraries(mtmd PUBLIC ggml llama)
+target_include_directories(mtmd PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/tools/mtmd
+)
+target_include_directories(mtmd PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/vendor
+)
+target_compile_features(mtmd PRIVATE cxx_std_17)
+set_target_properties(mtmd PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # Find Node.js and node-addon-api
 include_directories(${CMAKE_JS_INC})
 
@@ -53,6 +76,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 # Link against llama.cpp
 target_link_libraries(${PROJECT_NAME} PRIVATE
     llama
+    mtmd
     ggml
     ${CMAKE_JS_LIB}
 )

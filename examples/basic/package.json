@@ -6,6 +6,7 @@
     "agent": "tsx src/agent.ts",
     "agent-tool-call": "tsx src/agent-tool-call.ts",
     "generate-text": "tsx src/generate-text.ts",
+    "generate-text-image": "tsx src/generate-text-image.ts",
     "generate-text-output": "tsx src/generate-text-output.ts",
     "stream-text": "tsx src/stream-text.ts",
     "stream-text-reasoning": "tsx src/stream-text-reasoning.ts",

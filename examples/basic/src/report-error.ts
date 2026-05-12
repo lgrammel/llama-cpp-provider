@@ -1,6 +1,13 @@
-export function reportError(error: unknown, modelPath: string): void {
+export function reportError(
+  error: unknown,
+  modelPath: string,
+  mmprojPath?: string
+): void {
   console.error("\nExample failed.");
   console.error(`Model path: ${modelPath}`);
+  if (mmprojPath) {
+    console.error(`mmproj path: ${mmprojPath}`);
+  }
   console.error(formatError(error));
 }
 

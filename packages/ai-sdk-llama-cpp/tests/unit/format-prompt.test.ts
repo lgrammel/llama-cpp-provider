@@ -51,18 +51,48 @@ describe("convertMessages", () => {
       ]);
     });
 
-    it("ignores non-text parts in user message", () => {
+    it("converts image file parts to media markers and image data", () => {
       const messages: LanguageModelV4Message[] = [
         {
           role: "user",
           content: [
             { type: "text", text: "Hello" },
-            // File parts are not supported, should be ignored
             {
               type: "file",
-              url: "data:image/png;base64,abc",
+              data: { type: "data", data: new Uint8Array([1, 2, 3]) },
               mediaType: "image/png",
-            } as any,
+            },
+          ],
+        },
+      ];
+
+      const result = convertMessages(messages);
+
+      expect(result).toEqual([
+        {
+          role: "user",
+          content: "Hello\n<__media__>",
+          images: [
+            {
+              data: new Uint8Array([1, 2, 3]),
+              mediaType: "image/png",
+            },
+          ],
+        },
+      ]);
+    });
+
+    it("ignores non-image file parts in user message", () => {
+      const messages: LanguageModelV4Message[] = [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Hello" },
+            {
+              type: "file",
+              data: { type: "text", text: "notes" },
+              mediaType: "text/plain",
+            },
           ],
         },
       ];
@@ -70,6 +100,36 @@ describe("convertMessages", () => {
       const result = convertMessages(messages);
 
       expect(result).toEqual([{ role: "user", content: "Hello" }]);
+    });
+
+    it("decodes base64 image data", () => {
+      const messages: LanguageModelV4Message[] = [
+        {
+          role: "user",
+          content: [
+            {
+              type: "file",
+              data: { type: "data", data: "AQID" },
+              mediaType: "image/png",
+            },
+          ],
+        },
+      ];
+
+      const result = convertMessages(messages);
+
+      expect(result).toEqual([
+        {
+          role: "user",
+          content: "<__media__>",
+          images: [
+            {
+              data: new Uint8Array([1, 2, 3]),
+              mediaType: "image/png",
+            },
+          ],
+        },
+      ]);
     });
   });
 

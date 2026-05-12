@@ -168,6 +168,38 @@ describe("LlamaCppLanguageModel Integration", () => {
       );
     });
 
+    it("passes image inputs to native binding", async () => {
+      const imageData = new Uint8Array([1, 2, 3]);
+      await model.doGenerate({
+        prompt: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Describe this image." },
+              {
+                type: "file",
+                data: { type: "data", data: imageData },
+                mediaType: "image/png",
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(nativeBinding.generate).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          messages: [
+            {
+              role: "user",
+              content: "Describe this image.\n<__media__>",
+              images: [{ data: imageData, mediaType: "image/png" }],
+            },
+          ],
+        })
+      );
+    });
+
     it("returns Gemma 4 thinking as reasoning content", async () => {
       vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
         text: "<|channel>thought\nI should answer briefly.<channel|>Hello!",
@@ -498,6 +530,7 @@ describe("LlamaCppLanguageModel Integration", () => {
         threads: 8,
         debug: true,
         chatTemplate: "llama3",
+        mmprojPath: "/custom/mmproj.gguf",
       });
 
       await customModel.doGenerate({
@@ -511,6 +544,7 @@ describe("LlamaCppLanguageModel Integration", () => {
         threads: 8,
         debug: true,
         chatTemplate: "llama3",
+        mmprojPath: "/custom/mmproj.gguf",
       });
 
       await customModel.dispose();

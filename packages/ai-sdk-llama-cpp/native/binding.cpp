@@ -16,19 +16,21 @@ static std::atomic<int> g_next_handle{1};
 
 class LoadModelWorker : public Napi::AsyncWorker {
 public:
-  LoadModelWorker(Napi::Function &callback, const std::string &model_path, int n_gpu_layers,
-                  int n_ctx, int n_threads, bool debug, const std::string &chat_template,
-                  bool embedding)
-      : Napi::AsyncWorker(callback), model_path_(model_path), n_gpu_layers_(n_gpu_layers),
-        n_ctx_(n_ctx), n_threads_(n_threads), debug_(debug), chat_template_(chat_template),
-        embedding_(embedding), handle_(-1), success_(false) {}
+  LoadModelWorker(Napi::Function &callback, const std::string &model_path,
+                  const std::string &mmproj_path, int n_gpu_layers, int n_ctx, int n_threads,
+                  bool debug, const std::string &chat_template, bool embedding)
+      : Napi::AsyncWorker(callback), model_path_(model_path), mmproj_path_(mmproj_path),
+        n_gpu_layers_(n_gpu_layers), n_ctx_(n_ctx), n_threads_(n_threads), debug_(debug),
+        chat_template_(chat_template), embedding_(embedding), handle_(-1), success_(false) {}
 
   void Execute() override {
     auto model = std::make_unique<llama_wrapper::LlamaModel>();
 
     llama_wrapper::ModelParams model_params;
     model_params.model_path = model_path_;
+    model_params.mmproj_path = mmproj_path_;
     model_params.n_gpu_layers = n_gpu_layers_;
+    model_params.n_threads = n_threads_;
     model_params.debug = debug_;
     model_params.chat_template = chat_template_;
 
@@ -69,6 +71,7 @@ public:
 
 private:
   std::string model_path_;
+  std::string mmproj_path_;
   int n_gpu_layers_;
   int n_ctx_;
   int n_threads_;
@@ -267,6 +270,8 @@ Napi::Value LoadModel(const Napi::CallbackInfo &info) {
   Napi::Function callback = info[1].As<Napi::Function>();
 
   std::string model_path = options.Get("modelPath").As<Napi::String>().Utf8Value();
+  std::string mmproj_path =
+      options.Has("mmprojPath") ? options.Get("mmprojPath").As<Napi::String>().Utf8Value() : "";
   int n_gpu_layers =
       options.Has("gpuLayers") ? options.Get("gpuLayers").As<Napi::Number>().Int32Value() : 99;
   int n_ctx = options.Has("contextSize")
@@ -281,8 +286,8 @@ Napi::Value LoadModel(const Napi::CallbackInfo &info) {
   bool embedding =
       options.Has("embedding") ? options.Get("embedding").As<Napi::Boolean>().Value() : false;
 
-  auto worker = new LoadModelWorker(callback, model_path, n_gpu_layers, n_ctx, n_threads, debug,
-                                    chat_template, embedding);
+  auto worker = new LoadModelWorker(callback, model_path, mmproj_path, n_gpu_layers, n_ctx,
+                                    n_threads, debug, chat_template, embedding);
   worker->Queue();
 
   return env.Undefined();
@@ -317,6 +322,18 @@ std::vector<llama_wrapper::ChatMessage> ParseMessages(Napi::Array messages_arr) 
     llama_wrapper::ChatMessage msg;
     msg.role = msg_obj.Get("role").As<Napi::String>().Utf8Value();
     msg.content = msg_obj.Get("content").As<Napi::String>().Utf8Value();
+    if (msg_obj.Has("images") && msg_obj.Get("images").IsArray()) {
+      Napi::Array images_arr = msg_obj.Get("images").As<Napi::Array>();
+      for (uint32_t j = 0; j < images_arr.Length(); j++) {
+        Napi::Object image_obj = images_arr.Get(j).As<Napi::Object>();
+        if (!image_obj.Has("data") || !image_obj.Get("data").IsTypedArray()) {
+          continue;
+        }
+
+        Napi::Uint8Array data = image_obj.Get("data").As<Napi::Uint8Array>();
+        msg.images.emplace_back(data.Data(), data.Data() + data.ByteLength());
+      }
+    }
     messages.push_back(msg);
   }
   return messages;

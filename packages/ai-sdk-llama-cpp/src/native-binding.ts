@@ -13,6 +13,7 @@ const binding = require(
 
 export interface LoadModelOptions {
   modelPath: string;
+  mmprojPath?: string;
   gpuLayers?: number;
   contextSize?: number;
   threads?: number;
@@ -34,6 +35,12 @@ export interface LoadModelOptions {
 export interface ChatMessage {
   role: string;
   content: string;
+  images?: ImageInput[];
+}
+
+export interface ImageInput {
+  data: Uint8Array;
+  mediaType?: string;
 }
 
 export interface GenerateOptions {
@@ -91,7 +98,12 @@ interface NativeBinding {
 }
 
 export function loadModel(options: LoadModelOptions): Promise<number> {
-  return validateModelPath(options.modelPath).then(
+  return Promise.all([
+    validateModelPath(options.modelPath, "modelPath"),
+    options.mmprojPath
+      ? validateModelPath(options.mmprojPath, "mmprojPath")
+      : undefined,
+  ]).then(
     () =>
       new Promise((resolve, reject) => {
         binding.loadModel(options, (error, handle) => {
@@ -107,10 +119,13 @@ export function loadModel(options: LoadModelOptions): Promise<number> {
   );
 }
 
-async function validateModelPath(modelPath: string): Promise<void> {
+async function validateModelPath(
+  modelPath: string,
+  optionName: "modelPath" | "mmprojPath"
+): Promise<void> {
   if (modelPath.startsWith("~/")) {
     throw new Error(
-      `Failed to load model: modelPath uses '~', which is not expanded automatically. ` +
+      `Failed to load model: ${optionName} uses '~', which is not expanded automatically. ` +
         `Pass an absolute path instead. Received: ${modelPath}`
     );
   }
@@ -121,12 +136,12 @@ async function validateModelPath(modelPath: string): Promise<void> {
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       throw new Error(
-        `Failed to load model: file does not exist at ${modelPath}`
+        `Failed to load model: ${optionName} file does not exist at ${modelPath}`
       );
     }
 
     throw new Error(
-      `Failed to load model: could not access ${modelPath}: ${
+      `Failed to load model: could not access ${optionName} at ${modelPath}: ${
         error instanceof Error ? error.message : String(error)
       }`
     );
@@ -134,7 +149,7 @@ async function validateModelPath(modelPath: string): Promise<void> {
 
   if (!modelFile.isFile()) {
     throw new Error(
-      `Failed to load model: expected a GGUF file but found a directory at ${modelPath}`
+      `Failed to load model: expected ${optionName} to be a GGUF file but found a directory at ${modelPath}`
     );
   }
 }

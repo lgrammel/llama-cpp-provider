@@ -13,6 +13,7 @@ It loads llama.cpp directly into Node.js through native C++ bindings, so local G
 - Native llama.cpp inference through `node-addon-api` / N-API.
 - Metal GPU acceleration on macOS.
 - Text generation with `generateText` and `streamText`.
+- Image inputs for multimodal GGUF models with a matching `mmproj` file.
 - Structured JSON output with `generateObject`.
 - AI SDK tool calling with generated grammar constraints.
 - Embeddings with `embed` and `embedMany`.
@@ -73,6 +74,52 @@ try {
 Always call `dispose()` when you are done with a model so native CPU/GPU resources are released.
 
 ## Usage
+
+### Image Inputs
+
+Image inputs require a vision-capable GGUF model and its matching multimodal projector (`mmproj`) GGUF file.
+
+```typescript
+import { readFile } from "node:fs/promises";
+import { generateText } from "ai";
+import { llamaCpp } from "ai-sdk-llama-cpp";
+
+const model = llamaCpp({
+  modelPath: "./models/gemma-4-31B-it-Q4_K_M.gguf",
+  mmprojPath: "./models/mmproj-gemma-4-31B-it.gguf",
+  model: {
+    chatTemplate: "gemma",
+  },
+});
+
+try {
+  const { text } = await generateText({
+    model,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Describe this image." },
+          {
+            type: "file",
+            data: {
+              type: "data",
+              data: await readFile("./images/example.png"),
+            },
+            mediaType: "image/png",
+          },
+        ],
+      },
+    ],
+  });
+
+  console.log(text);
+} finally {
+  await model.dispose();
+}
+```
+
+Inline `Uint8Array`, base64 data, and data URL image parts are supported. Local file paths should be loaded into bytes before calling the model.
 
 ### Streaming Text
 

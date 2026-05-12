@@ -1,5 +1,7 @@
 #include "llama-wrapper.h"
 #include "llama.h"
+#include "mtmd-helper.h"
+#include "mtmd.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -27,12 +29,13 @@ LlamaModel::~LlamaModel() {
 }
 
 LlamaModel::LlamaModel(LlamaModel &&other) noexcept
-    : model_(other.model_), ctx_(other.ctx_), sampler_(other.sampler_),
-      model_path_(std::move(other.model_path_)), chat_template_(std::move(other.chat_template_)),
-      n_batch_(other.n_batch_) {
+    : model_(other.model_), ctx_(other.ctx_), sampler_(other.sampler_), mtmd_ctx_(other.mtmd_ctx_),
+      model_path_(std::move(other.model_path_)), mmproj_path_(std::move(other.mmproj_path_)),
+      chat_template_(std::move(other.chat_template_)), n_batch_(other.n_batch_) {
   other.model_ = nullptr;
   other.ctx_ = nullptr;
   other.sampler_ = nullptr;
+  other.mtmd_ctx_ = nullptr;
 }
 
 LlamaModel &LlamaModel::operator=(LlamaModel &&other) noexcept {
@@ -41,12 +44,15 @@ LlamaModel &LlamaModel::operator=(LlamaModel &&other) noexcept {
     model_ = other.model_;
     ctx_ = other.ctx_;
     sampler_ = other.sampler_;
+    mtmd_ctx_ = other.mtmd_ctx_;
     model_path_ = std::move(other.model_path_);
+    mmproj_path_ = std::move(other.mmproj_path_);
     chat_template_ = std::move(other.chat_template_);
     n_batch_ = other.n_batch_;
     other.model_ = nullptr;
     other.ctx_ = nullptr;
     other.sampler_ = nullptr;
+    other.mtmd_ctx_ = nullptr;
   }
   return *this;
 }
@@ -76,7 +82,22 @@ bool LlamaModel::load(const ModelParams &params) {
   }
 
   model_path_ = params.model_path;
+  mmproj_path_ = params.mmproj_path;
   chat_template_ = params.chat_template;
+
+  if (!mmproj_path_.empty()) {
+    mtmd_context_params mtmd_params = mtmd_context_params_default();
+    mtmd_params.use_gpu = params.n_gpu_layers > 0;
+    mtmd_params.n_threads = params.n_threads;
+    mtmd_params.print_timings = params.debug;
+
+    mtmd_helper_log_set(llama_log_callback, nullptr);
+    mtmd_ctx_ = mtmd_init_from_file(mmproj_path_.c_str(), model_, mtmd_params);
+    if (!mtmd_ctx_ || !mtmd_support_vision(mtmd_ctx_)) {
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -93,12 +114,17 @@ void LlamaModel::unload() {
     llama_free(ctx_);
     ctx_ = nullptr;
   }
+  if (mtmd_ctx_) {
+    mtmd_free(mtmd_ctx_);
+    mtmd_ctx_ = nullptr;
+  }
   if (model_) {
     llama_model_free(model_);
     model_ = nullptr;
     llama_backend_free();
   }
   model_path_.clear();
+  mmproj_path_.clear();
 }
 
 bool LlamaModel::create_context(const ContextParams &params) {
@@ -336,6 +362,101 @@ bool LlamaModel::is_eos_token(int32_t token) {
   return llama_vocab_is_eog(vocab, token);
 }
 
+bool LlamaModel::prefill_prompt(const std::string &prompt,
+                                const std::vector<std::vector<unsigned char>> &images,
+                                GenerationResult &result, int &n_past) {
+  n_past = 0;
+
+  // Clear the memory/KV cache
+  llama_memory_t mem = llama_get_memory(ctx_);
+  if (mem) {
+    llama_memory_clear(mem, true);
+  }
+
+  if (images.empty()) {
+    // Tokenize the prompt
+    std::vector<int32_t> prompt_tokens = tokenize(prompt, true);
+    result.prompt_tokens = prompt_tokens.size();
+
+    // Process prompt in chunks if it exceeds batch size (chunked prefill)
+    size_t n_tokens = prompt_tokens.size();
+    size_t n_processed = 0;
+
+    while (n_processed < n_tokens) {
+      size_t n_chunk = std::min(static_cast<size_t>(n_batch_), n_tokens - n_processed);
+      llama_batch batch = llama_batch_get_one(prompt_tokens.data() + n_processed, n_chunk);
+
+      if (llama_decode(ctx_, batch) != 0) {
+        result.error_message = "Failed to decode prompt";
+        return false;
+      }
+
+      n_processed += n_chunk;
+    }
+
+    n_past = static_cast<int>(prompt_tokens.size());
+    return true;
+  }
+
+  if (!mtmd_ctx_) {
+    result.error_message = "Image inputs require mmprojPath to be configured";
+    return false;
+  }
+
+  std::vector<mtmd_bitmap *> bitmaps;
+  std::vector<const mtmd_bitmap *> bitmap_ptrs;
+  bitmaps.reserve(images.size());
+  bitmap_ptrs.reserve(images.size());
+
+  for (const auto &image : images) {
+    mtmd_bitmap *bitmap = mtmd_helper_bitmap_init_from_buf(mtmd_ctx_, image.data(), image.size());
+    if (!bitmap) {
+      for (mtmd_bitmap *created_bitmap : bitmaps) {
+        mtmd_bitmap_free(created_bitmap);
+      }
+      result.error_message = "Failed to decode image input";
+      return false;
+    }
+    bitmaps.push_back(bitmap);
+    bitmap_ptrs.push_back(bitmap);
+  }
+
+  mtmd_input_chunks *chunks = mtmd_input_chunks_init();
+  mtmd_input_text text;
+  text.text = prompt.c_str();
+  text.add_special = true;
+  text.parse_special = true;
+
+  int32_t tokenize_result =
+      mtmd_tokenize(mtmd_ctx_, chunks, &text, bitmap_ptrs.data(), bitmap_ptrs.size());
+  if (tokenize_result != 0) {
+    mtmd_input_chunks_free(chunks);
+    for (mtmd_bitmap *bitmap : bitmaps) {
+      mtmd_bitmap_free(bitmap);
+    }
+    result.error_message = "Failed to tokenize multimodal prompt";
+    return false;
+  }
+
+  llama_pos new_n_past = 0;
+  int32_t eval_result =
+      mtmd_helper_eval_chunks(mtmd_ctx_, ctx_, chunks, 0, 0, n_batch_, true, &new_n_past);
+
+  result.prompt_tokens = static_cast<int>(mtmd_helper_get_n_tokens(chunks));
+  mtmd_input_chunks_free(chunks);
+  for (mtmd_bitmap *bitmap : bitmaps) {
+    mtmd_bitmap_free(bitmap);
+  }
+
+  if (eval_result != 0) {
+    result.error_message = "Failed to decode multimodal prompt";
+    return false;
+  }
+
+  n_past = static_cast<int>(new_n_past);
+  return true;
+}
+
 GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
                                       const GenerationParams &params) {
   GenerationResult result;
@@ -354,39 +475,24 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
     return result;
   }
 
-  // Tokenize the prompt
-  std::vector<int32_t> prompt_tokens = tokenize(prompt, true);
-  result.prompt_tokens = prompt_tokens.size();
-  result.completion_tokens = 0;
-
-  // Clear the memory/KV cache
-  llama_memory_t mem = llama_get_memory(ctx_);
-  if (mem) {
-    llama_memory_clear(mem, true);
+  std::vector<std::vector<unsigned char>> images;
+  for (const auto &message : messages) {
+    images.insert(images.end(), message.images.begin(), message.images.end());
   }
+
+  result.completion_tokens = 0;
 
   // Create sampler
   create_sampler(params);
 
-  // Process prompt in chunks if it exceeds batch size (chunked prefill)
-  size_t n_tokens = prompt_tokens.size();
-  size_t n_processed = 0;
-
-  while (n_processed < n_tokens) {
-    size_t n_chunk = std::min(static_cast<size_t>(n_batch_), n_tokens - n_processed);
-    llama_batch batch = llama_batch_get_one(prompt_tokens.data() + n_processed, n_chunk);
-
-    if (llama_decode(ctx_, batch) != 0) {
-      result.error_message = "Failed to decode prompt";
-      return result;
-    }
-
-    n_processed += n_chunk;
+  int n_past = 0;
+  if (!prefill_prompt(prompt, images, result, n_past)) {
+    return result;
   }
 
   // Generate tokens
   std::string generated_text;
-  int n_cur = prompt_tokens.size();
+  int n_cur = n_past;
 
   for (int i = 0; i < params.max_tokens; i++) {
     // Sample the next token
@@ -458,39 +564,24 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
     return result;
   }
 
-  // Tokenize the prompt
-  std::vector<int32_t> prompt_tokens = tokenize(prompt, true);
-  result.prompt_tokens = prompt_tokens.size();
-  result.completion_tokens = 0;
-
-  // Clear the memory/KV cache
-  llama_memory_t mem = llama_get_memory(ctx_);
-  if (mem) {
-    llama_memory_clear(mem, true);
+  std::vector<std::vector<unsigned char>> images;
+  for (const auto &message : messages) {
+    images.insert(images.end(), message.images.begin(), message.images.end());
   }
+
+  result.completion_tokens = 0;
 
   // Create sampler
   create_sampler(params);
 
-  // Process prompt in chunks if it exceeds batch size (chunked prefill)
-  size_t n_tokens = prompt_tokens.size();
-  size_t n_processed = 0;
-
-  while (n_processed < n_tokens) {
-    size_t n_chunk = std::min(static_cast<size_t>(n_batch_), n_tokens - n_processed);
-    llama_batch batch = llama_batch_get_one(prompt_tokens.data() + n_processed, n_chunk);
-
-    if (llama_decode(ctx_, batch) != 0) {
-      result.error_message = "Failed to decode prompt";
-      return result;
-    }
-
-    n_processed += n_chunk;
+  int n_past = 0;
+  if (!prefill_prompt(prompt, images, result, n_past)) {
+    return result;
   }
 
   // Generate tokens
   std::string generated_text;
-  int n_cur = prompt_tokens.size();
+  int n_cur = n_past;
 
   for (int i = 0; i < params.max_tokens; i++) {
     // Sample the next token
