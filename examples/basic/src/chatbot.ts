@@ -2,11 +2,16 @@ import { llamaCpp } from "ai-sdk-llama-cpp";
 import { stepCountIs, ModelMessage, streamText, tool } from "ai";
 import * as readline from "node:readline/promises";
 import { z } from "zod";
-import { exampleModel, modelPath } from "./example-model.js";
+import {
+  exampleContextSize,
+  exampleModel,
+  modelPath,
+} from "./example-model.js";
 import { reportError } from "./report-error.js";
 
 const model = llamaCpp({
   modelPath,
+  contextSize: exampleContextSize,
   model: exampleModel,
 });
 

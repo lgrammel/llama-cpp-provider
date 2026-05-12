@@ -35,6 +35,14 @@ import {
 
 export interface LlamaCppModelConfig {
   modelPath: string;
+  /**
+   * Maximum context size.
+   *
+   * This setting is highly dependent on the model and the memory available on
+   * the machine. Higher values can consume significant memory and may freeze
+   * the machine if set too high. Monitor system memory when increasing this
+   * value.
+   */
   contextSize?: number;
   gpuLayers?: number;
   threads?: number;

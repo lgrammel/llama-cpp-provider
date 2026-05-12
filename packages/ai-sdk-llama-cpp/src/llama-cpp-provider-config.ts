@@ -23,11 +23,6 @@ export const thinkTagsReasoning: LlamaCppReasoningConfig = {
 
 export interface LlamaCppModelInfo {
   /**
-   * Maximum context size (default: 2048).
-   */
-  contextSize?: number;
-
-  /**
    * Chat template to use for formatting messages.
    * - "auto" (default): Use the template embedded in the GGUF model file
    * - Template name: Use a specific built-in template (e.g., "llama3", "gemma")
@@ -47,9 +42,19 @@ export interface LlamaCppProviderConfig {
   modelPath: string;
 
   /**
-   * Model-specific metadata such as context size, chat template, and reasoning format.
+   * Model-specific metadata such as chat template and reasoning format.
    */
   model?: LlamaCppModelInfo;
+
+  /**
+   * Maximum context size (default: 2048).
+   *
+   * This setting is highly dependent on the model and the memory available on
+   * the machine. Higher values can consume significant memory and may freeze
+   * the machine if set too high. Monitor system memory when increasing this
+   * value.
+   */
+  contextSize?: number;
 
   /**
    * Number of layers to offload to GPU (default: 99, meaning all layers).

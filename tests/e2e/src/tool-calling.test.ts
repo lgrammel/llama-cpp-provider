@@ -41,9 +41,7 @@ describeE2E("E2E Tool Calling Tests", () => {
 
     model = llamaCpp({
       modelPath: TEST_MODEL_PATH,
-      model: {
-        contextSize: 4096,
-      },
+      contextSize: 4096,
       gpuLayers: 0, // Use CPU for CI compatibility
       threads: 4,
     });

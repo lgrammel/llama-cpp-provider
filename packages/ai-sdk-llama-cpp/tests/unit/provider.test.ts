@@ -29,6 +29,7 @@ describe("llamaCpp", () => {
     it("accepts machine-specific load options at the top level", () => {
       const model = llamaCpp({
         modelPath: "/path/to/model.gguf",
+        contextSize: 4096,
         gpuLayers: 32,
         threads: 8,
         debug: true,
@@ -41,12 +42,13 @@ describe("llamaCpp", () => {
     it("passes nested model-specific options through", () => {
       const model = llamaCpp({
         modelPath: "/path/to/model.gguf",
+        contextSize: 4096,
         model: gemma4_31b_it,
       });
 
       expect(model).toHaveProperty("config", {
         modelPath: "/path/to/model.gguf",
-        contextSize: 262144,
+        contextSize: 4096,
         gpuLayers: undefined,
         threads: undefined,
         debug: undefined,
@@ -55,9 +57,8 @@ describe("llamaCpp", () => {
       });
     });
 
-    it("exports full Gemma 4 model info presets", () => {
+    it("exports Gemma 4 model info presets without machine-specific load options", () => {
       expect(gemma4_31b_it).toEqual({
-        contextSize: 262144,
         chatTemplate: "gemma",
         reasoning: expect.objectContaining({
           openingMarker: "<|channel>thought\n",

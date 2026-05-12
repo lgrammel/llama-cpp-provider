@@ -1,10 +1,15 @@
 import { embedMany } from "ai";
 import { llamaCpp } from "ai-sdk-llama-cpp";
-import { exampleModel, modelPath } from "./example-model.js";
+import {
+  exampleContextSize,
+  exampleModel,
+  modelPath,
+} from "./example-model.js";
 import { reportError } from "./report-error.js";
 
 const model = llamaCpp.embedding({
   modelPath,
+  contextSize: exampleContextSize,
   model: exampleModel,
 });
 

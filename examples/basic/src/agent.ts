@@ -6,8 +6,8 @@ import { reportError } from "./report-error.js";
 
 const model = llamaCpp({
   modelPath,
+  contextSize: 65536,
   model: {
-    contextSize: 65536,
     chatTemplate: "gemma",
     reasoning: gemma4Reasoning,
   },

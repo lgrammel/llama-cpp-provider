@@ -269,13 +269,16 @@ const model = llamaCpp({
   // Optional: number of CPU threads. Defaults to 4.
   threads: 8,
 
+  // Optional: maximum context size. Defaults to 2048.
+  // This is highly model and machine memory dependent. High settings can
+  // consume significant memory and may freeze the machine, so monitor system
+  // memory when increasing it.
+  contextSize: 4096,
+
   // Optional: enable verbose llama.cpp output. Defaults to false.
   debug: true,
 
   model: {
-    // Optional: maximum context size. Defaults to 2048.
-    contextSize: 4096,
-
     // Optional: "auto" uses the template embedded in the GGUF file.
     // You can also pass a built-in template name like "llama3" or "chatml".
     chatTemplate: "auto",
@@ -315,8 +318,8 @@ Parameters:
 - `config.modelPath` (string, required): Path to the GGUF model file.
 - `config.gpuLayers` (number, optional): GPU layers to offload. Defaults to `99`.
 - `config.threads` (number, optional): CPU threads. Defaults to `4`.
+- `config.contextSize` (number, optional): Maximum context size. Defaults to `2048`. This is highly model and machine memory dependent. High settings can consume significant memory and may freeze the machine, so monitor system memory when increasing it.
 - `config.debug` (boolean, optional): Enable verbose llama.cpp output. Defaults to `false`.
-- `config.model.contextSize` (number, optional): Maximum context size. Defaults to `2048`.
 - `config.model.chatTemplate` (string, optional): Chat template used to format messages. Defaults to `"auto"`.
 - `config.model.reasoning` (object, optional): Extract thinking into AI SDK reasoning parts.
 

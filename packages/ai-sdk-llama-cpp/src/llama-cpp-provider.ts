@@ -15,7 +15,7 @@ function createLlamaCpp(): LlamaCppProvider {
   const provider = (config: LlamaCppProviderConfig): LlamaCppLanguageModel => {
     const modelConfig: LlamaCppModelConfig = {
       modelPath: config.modelPath,
-      contextSize: config.model?.contextSize,
+      contextSize: config.contextSize,
       gpuLayers: config.gpuLayers,
       threads: config.threads,
       debug: config.debug,

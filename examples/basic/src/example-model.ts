@@ -9,5 +9,6 @@ export const modelPath = join(
 
 export const exampleModel = {
   ...gemma4_31b_it,
-  contextSize: 4096,
 };
+
+export const exampleContextSize = 4096;

@@ -10,13 +10,11 @@ export const gemma4Reasoning: LlamaCppReasoningConfig = {
 };
 
 export const gemma4_31b_it: LlamaCppModelInfo = {
-  contextSize: 262144,
   chatTemplate: "gemma",
   reasoning: gemma4Reasoning,
 };
 
 export const gemma4_26b_a4b: LlamaCppModelInfo = {
-  contextSize: 262144,
   chatTemplate: "gemma",
   reasoning: gemma4Reasoning,
 };
