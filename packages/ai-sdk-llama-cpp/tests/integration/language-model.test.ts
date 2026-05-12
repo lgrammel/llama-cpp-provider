@@ -531,6 +531,7 @@ describe("LlamaCppLanguageModel Integration", () => {
         debug: true,
         chatTemplate: "llama3",
         mmprojPath: "/custom/mmproj.gguf",
+        memorySafety: { mode: "off" },
       });
 
       await customModel.doGenerate({
@@ -548,6 +549,76 @@ describe("LlamaCppLanguageModel Integration", () => {
       });
 
       await customModel.dispose();
+    });
+
+    it("throws before loading when context exceeds model maximum", async () => {
+      const guardedModel = new LlamaCppLanguageModel({
+        modelPath: "/custom/path.gguf",
+        contextSize: 4097,
+        memory: {
+          maxContextSize: 4096,
+          kvCache: {
+            layers: [{ count: 1, keyValueHeads: 1, headDim: 1 }],
+          },
+        },
+        memorySafety: {
+          maxMemoryBytes: Number.MAX_SAFE_INTEGER,
+        },
+      });
+
+      await expect(
+        guardedModel.doGenerate({
+          prompt: [{ role: "user", content: [{ type: "text", text: "test" }] }],
+        })
+      ).rejects.toThrow("exceeds the model maximum context size");
+
+      expect(nativeBinding.loadModel).not.toHaveBeenCalled();
+    });
+
+    it("clamps context before loading when configured", async () => {
+      const clampedModel = new LlamaCppLanguageModel({
+        modelPath: "/custom/path.gguf",
+        contextSize: 4096,
+        memory: {
+          kvCache: {
+            layers: [{ count: 1, keyValueHeads: 1, headDim: 1 }],
+          },
+        },
+        memorySafety: {
+          mode: "clamp",
+          maxMemoryBytes: 512,
+          computeOverheadBytes: 0,
+        },
+      });
+
+      await clampedModel.doGenerate({
+        prompt: [{ role: "user", content: [{ type: "text", text: "test" }] }],
+        maxOutputTokens: 128,
+      });
+
+      expect(nativeBinding.loadModel).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contextSize: 128,
+        })
+      );
+
+      await clampedModel.dispose();
+    });
+
+    it("throws when maxOutputTokens exceeds loaded context size", async () => {
+      const smallContextModel = new LlamaCppLanguageModel({
+        modelPath: "/custom/path.gguf",
+        contextSize: 16,
+      });
+
+      await expect(
+        smallContextModel.doGenerate({
+          prompt: [{ role: "user", content: [{ type: "text", text: "test" }] }],
+          maxOutputTokens: 17,
+        })
+      ).rejects.toThrow("maxOutputTokens 17 exceeds the loaded contextSize 16");
+
+      await smallContextModel.dispose();
     });
 
     it("uses default values for optional config", async () => {

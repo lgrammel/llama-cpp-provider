@@ -11,6 +11,7 @@ import type {
   LanguageModelV4Usage,
   SharedV4Warning,
 } from "@ai-sdk/provider";
+import { stat } from "node:fs/promises";
 
 import {
   loadModel,
@@ -30,8 +31,11 @@ import {
 } from "./json-schema-to-grammar.js";
 import {
   thinkTagsReasoning,
+  type LlamaCppMemorySafetyConfig,
+  type LlamaCppModelMemoryInfo,
   type LlamaCppReasoningConfig,
 } from "./llama-cpp-provider-config.js";
+import { checkMemorySafety } from "./memory-estimation.js";
 
 export interface LlamaCppModelConfig {
   modelPath: string;
@@ -50,6 +54,8 @@ export interface LlamaCppModelConfig {
    * value.
    */
   contextSize?: number;
+  memorySafety?: LlamaCppMemorySafetyConfig;
+  memory?: LlamaCppModelMemoryInfo;
   gpuLayers?: number;
   threads?: number;
   /**
@@ -759,6 +765,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   private modelHandle: number | null = null;
   private readonly config: LlamaCppModelConfig;
   private initPromise: Promise<void> | null = null;
+  private loadedContextSize: number | null = null;
 
   constructor(config: LlamaCppModelConfig) {
     this.config = config;
@@ -778,9 +785,17 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
     }
 
     this.initPromise = (async () => {
+      const requestedContextSize = this.config.contextSize ?? 2048;
+      const memorySafety = await checkModelMemorySafety({
+        modelPath: this.config.modelPath,
+        mmprojPath: this.config.mmprojPath,
+        memory: this.config.memory,
+        contextSize: requestedContextSize,
+        memorySafety: this.config.memorySafety,
+      });
       const options: LoadModelOptions = {
         modelPath: this.config.modelPath,
-        contextSize: this.config.contextSize ?? 2048,
+        contextSize: memorySafety.contextSize,
         gpuLayers: this.config.gpuLayers ?? 99,
         threads: this.config.threads ?? 4,
         debug: this.config.debug ?? false,
@@ -792,6 +807,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       }
 
       this.modelHandle = await loadModel(options);
+      this.loadedContextSize = memorySafety.contextSize;
     })();
 
     await this.initPromise;
@@ -808,6 +824,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
     if (this.modelHandle !== null) {
       unloadModel(this.modelHandle);
       this.modelHandle = null;
+      this.loadedContextSize = null;
     }
   }
 
@@ -856,6 +873,10 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       stopSequences: options.stopSequences,
       grammar,
     };
+    validateGenerationContextSize(
+      this.loadedContextSize,
+      generateOptions.maxTokens
+    );
 
     const result = await generate(handle, generateOptions);
     const parsedContent = reasoningConfig
@@ -954,6 +975,10 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       stopSequences: options.stopSequences,
       grammar,
     };
+    validateGenerationContextSize(
+      this.loadedContextSize,
+      generateOptions.maxTokens
+    );
 
     const textId = crypto.randomUUID();
 
@@ -1156,5 +1181,54 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
         body: generateOptions,
       },
     };
+  }
+}
+
+async function checkModelMemorySafety(options: {
+  modelPath: string;
+  mmprojPath?: string;
+  memory?: LlamaCppModelMemoryInfo;
+  contextSize: number;
+  memorySafety?: LlamaCppMemorySafetyConfig;
+}) {
+  const [modelFileSizeBytes, mmprojFileSizeBytes] = await Promise.all([
+    getFileSize(options.modelPath),
+    options.mmprojPath ? getFileSize(options.mmprojPath) : undefined,
+  ]);
+
+  return checkMemorySafety({
+    model: options.memory,
+    contextSize: options.contextSize,
+    modelFileSizeBytes,
+    mmprojFileSizeBytes,
+    memorySafety: options.memorySafety,
+  });
+}
+
+async function getFileSize(path: string): Promise<number | undefined> {
+  try {
+    return (await stat(path)).size;
+  } catch {
+    return undefined;
+  }
+}
+
+function validateGenerationContextSize(
+  contextSize: number | null,
+  maxTokens: number | undefined
+): void {
+  if (contextSize === null || maxTokens === undefined) {
+    return;
+  }
+
+  if (!Number.isInteger(maxTokens) || maxTokens <= 0) {
+    throw new Error("maxOutputTokens must be a positive integer");
+  }
+
+  if (maxTokens > contextSize) {
+    throw new Error(
+      `maxOutputTokens ${maxTokens.toLocaleString()} exceeds the loaded contextSize ` +
+        `${contextSize.toLocaleString()}.`
+    );
   }
 }

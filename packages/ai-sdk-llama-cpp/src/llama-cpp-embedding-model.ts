@@ -4,6 +4,7 @@ import type {
   EmbeddingModelV4Result,
   SharedV4Warning,
 } from "@ai-sdk/provider";
+import { stat } from "node:fs/promises";
 
 import {
   loadModel,
@@ -14,6 +15,7 @@ import {
   type EmbedOptions,
 } from "./native-binding.js";
 import type { LlamaCppProviderConfig } from "./llama-cpp-provider-config.js";
+import { checkMemorySafety } from "./memory-estimation.js";
 
 export class LlamaCppEmbeddingModel implements EmbeddingModelV4 {
   readonly specificationVersion = "v4" as const;
@@ -54,9 +56,16 @@ export class LlamaCppEmbeddingModel implements EmbeddingModelV4 {
     }
 
     this.initPromise = (async () => {
+      const modelFileSizeBytes = await getFileSize(this.config.modelPath);
+      const memorySafety = checkMemorySafety({
+        model: this.config.model?.memory,
+        contextSize: this.config.contextSize ?? 2048,
+        modelFileSizeBytes,
+        memorySafety: this.config.memorySafety,
+      });
       const options: LoadModelOptions = {
         modelPath: this.config.modelPath,
-        contextSize: this.config.contextSize ?? 2048,
+        contextSize: memorySafety.contextSize,
         gpuLayers: this.config.gpuLayers ?? 99,
         threads: this.config.threads ?? 4,
         debug: this.config.debug ?? false,
@@ -111,5 +120,13 @@ export class LlamaCppEmbeddingModel implements EmbeddingModelV4 {
       },
       warnings,
     };
+  }
+}
+
+async function getFileSize(path: string): Promise<number | undefined> {
+  try {
+    return (await stat(path)).size;
+  } catch {
+    return undefined;
   }
 }

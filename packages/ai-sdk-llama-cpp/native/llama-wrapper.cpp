@@ -364,7 +364,8 @@ bool LlamaModel::is_eos_token(int32_t token) {
 
 bool LlamaModel::prefill_prompt(const std::string &prompt,
                                 const std::vector<std::vector<unsigned char>> &images,
-                                GenerationResult &result, int &n_past) {
+                                const GenerationParams &params, GenerationResult &result,
+                                int &n_past) {
   n_past = 0;
 
   // Clear the memory/KV cache
@@ -377,6 +378,12 @@ bool LlamaModel::prefill_prompt(const std::string &prompt,
     // Tokenize the prompt
     std::vector<int32_t> prompt_tokens = tokenize(prompt, true);
     result.prompt_tokens = prompt_tokens.size();
+
+    const int n_ctx = llama_n_ctx(ctx_);
+    if (result.prompt_tokens + params.max_tokens > n_ctx) {
+      result.error_message = "Prompt tokens plus max_tokens exceed context size";
+      return false;
+    }
 
     // Process prompt in chunks if it exceeds batch size (chunked prefill)
     size_t n_tokens = prompt_tokens.size();
@@ -454,6 +461,11 @@ bool LlamaModel::prefill_prompt(const std::string &prompt,
   }
 
   n_past = static_cast<int>(new_n_past);
+  const int n_ctx = llama_n_ctx(ctx_);
+  if (n_past + params.max_tokens > n_ctx) {
+    result.error_message = "Prompt tokens plus max_tokens exceed context size";
+    return false;
+  }
   return true;
 }
 
@@ -486,7 +498,7 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
   create_sampler(params);
 
   int n_past = 0;
-  if (!prefill_prompt(prompt, images, result, n_past)) {
+  if (!prefill_prompt(prompt, images, params, result, n_past)) {
     return result;
   }
 
@@ -575,7 +587,7 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
   create_sampler(params);
 
   int n_past = 0;
-  if (!prefill_prompt(prompt, images, result, n_past)) {
+  if (!prefill_prompt(prompt, images, params, result, n_past)) {
     return result;
   }
 

@@ -21,6 +21,100 @@ export const thinkTagsReasoning: LlamaCppReasoningConfig = {
   closingMarker: "</think>",
 };
 
+export interface LlamaCppKvCacheLayerMemoryInfo {
+  /**
+   * Number of layers that share this KV-cache shape.
+   */
+  count: number;
+
+  /**
+   * Number of key/value heads when K and V use the same head count.
+   */
+  keyValueHeads?: number;
+
+  /**
+   * Number of key heads. Defaults to `keyValueHeads`.
+   */
+  keyHeads?: number;
+
+  /**
+   * Number of value heads. Defaults to `keyValueHeads`.
+   */
+  valueHeads?: number;
+
+  /**
+   * Head dimension when K and V use the same dimension.
+   */
+  headDim?: number;
+
+  /**
+   * Key head dimension. Defaults to `headDim`.
+   */
+  keyHeadDim?: number;
+
+  /**
+   * Value head dimension. Defaults to `headDim`.
+   */
+  valueHeadDim?: number;
+}
+
+export interface LlamaCppModelMemoryInfo {
+  /**
+   * Maximum context size supported by the model architecture.
+   */
+  maxContextSize?: number;
+
+  /**
+   * KV-cache shape used to estimate memory pressure before creating a
+   * llama.cpp context.
+   */
+  kvCache: {
+    /**
+     * Bytes per K/V element. llama.cpp defaults to f16 KV cache.
+     */
+    bytesPerValue?: number;
+    layers: LlamaCppKvCacheLayerMemoryInfo[];
+  };
+}
+
+export interface LlamaCppMemorySafetyConfig {
+  /**
+   * - "throw" (default): reject unsafe context sizes before native allocation
+   * - "clamp": reduce context size to the estimated safe maximum
+   * - "off": skip dynamic memory checks
+   */
+  mode?: "throw" | "clamp" | "off";
+
+  /**
+   * Explicit memory budget for model weights, KV cache, and overhead.
+   * Defaults to a conservative budget derived from available system memory.
+   */
+  maxMemoryBytes?: number;
+
+  /**
+   * Fraction of currently available system memory that may be used.
+   * Default: 0.9.
+   */
+  memoryUtilization?: number;
+
+  /**
+   * Memory kept free for macOS, other applications, and allocation spikes.
+   * Default: 10% of total memory, bounded to 4-16 GiB.
+   */
+  reserveMemoryBytes?: number;
+
+  /**
+   * Override bytes per K/V cache element. Defaults to model metadata or f16.
+   */
+  kvCacheBytesPerValue?: number;
+
+  /**
+   * Extra overhead budget for llama.cpp compute buffers and Metal allocations.
+   * Default: max(1 GiB, 15% of KV cache).
+   */
+  computeOverheadBytes?: number;
+}
+
 export interface LlamaCppModelInfo {
   /**
    * Chat template to use for formatting messages.
@@ -33,6 +127,11 @@ export interface LlamaCppModelInfo {
    * Extract model thinking into AI SDK reasoning parts.
    */
   reasoning?: LlamaCppReasoningConfig;
+
+  /**
+   * Architecture information used to estimate context memory usage.
+   */
+  memory?: LlamaCppModelMemoryInfo;
 }
 
 export interface LlamaCppProviderConfig {
@@ -62,6 +161,14 @@ export interface LlamaCppProviderConfig {
    * value.
    */
   contextSize?: number;
+
+  /**
+   * Protect against context sizes that are likely to exhaust available memory.
+   *
+   * Enabled by default when `model.memory` metadata is provided. Set to
+   * `{ mode: "off" }` to bypass the check.
+   */
+  memorySafety?: LlamaCppMemorySafetyConfig;
 
   /**
    * Number of layers to offload to GPU (default: 99, meaning all layers).

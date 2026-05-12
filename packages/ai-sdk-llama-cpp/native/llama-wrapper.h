@@ -135,7 +135,7 @@ private:
   // Prefill the prompt into the context and return the number of consumed positions.
   bool prefill_prompt(const std::string &prompt,
                       const std::vector<std::vector<unsigned char>> &images,
-                      GenerationResult &result, int &n_past);
+                      const GenerationParams &params, GenerationResult &result, int &n_past);
 };
 
 } // namespace llama_wrapper

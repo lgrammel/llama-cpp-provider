@@ -1,11 +1,23 @@
 export { llamaCpp, type LlamaCppProvider } from "./llama-cpp-provider.js";
 export {
   thinkTagsReasoning,
+  type LlamaCppKvCacheLayerMemoryInfo,
+  type LlamaCppMemorySafetyConfig,
   type LlamaCppModelInfo,
+  type LlamaCppModelMemoryInfo,
   type LlamaCppProviderConfig,
   type LlamaCppReasoningConfig,
 } from "./llama-cpp-provider-config.js";
 export { gemma4_26b_a4b, gemma4_31b_it, gemma4Reasoning } from "./gemma4.js";
+export { qwen3_6_dense, qwen3_6_moe } from "./qwen3.6.js";
+export {
+  checkMemorySafety,
+  estimateMemoryUsage,
+  type EstimateMemoryUsageOptions,
+  type MemorySafetyCheckOptions,
+  type MemorySafetyCheckResult,
+  type MemoryUsageEstimate,
+} from "./memory-estimation.js";
 export {
   LlamaCppLanguageModel,
   type LlamaCppModelConfig,

@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   gemma4_31b_it,
   gemma4_26b_a4b,
+  qwen3_6_dense,
+  qwen3_6_moe,
   llamaCpp,
   LlamaCppLanguageModel,
 } from "../../src/index.js";
@@ -51,6 +53,8 @@ describe("llamaCpp", () => {
         modelPath: "/path/to/model.gguf",
         mmprojPath: "/path/to/mmproj.gguf",
         contextSize: 4096,
+        memorySafety: undefined,
+        memory: gemma4_31b_it.memory,
         gpuLayers: undefined,
         threads: undefined,
         debug: undefined,
@@ -59,16 +63,21 @@ describe("llamaCpp", () => {
       });
     });
 
-    it("exports Gemma 4 model info presets without machine-specific load options", () => {
-      expect(gemma4_31b_it).toEqual({
+    it("exports model info presets with memory metadata", () => {
+      expect(gemma4_31b_it).toMatchObject({
         chatTemplate: "gemma",
         reasoning: expect.objectContaining({
           openingMarker: "<|channel>thought\n",
           closingMarker: "<channel|>",
           promptPrefix: "<|think|>\n",
         }),
+        memory: expect.objectContaining({
+          maxContextSize: 262144,
+        }),
       });
-      expect(gemma4_26b_a4b).toEqual(gemma4_31b_it);
+      expect(gemma4_26b_a4b.memory).toBeDefined();
+      expect(qwen3_6_dense.memory).toBeDefined();
+      expect(qwen3_6_moe.memory).toBeDefined();
     });
 
     it("handles minimal config with only modelPath", () => {

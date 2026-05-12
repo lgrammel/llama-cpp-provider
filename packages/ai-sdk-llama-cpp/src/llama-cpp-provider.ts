@@ -17,6 +17,8 @@ function createLlamaCpp(): LlamaCppProvider {
       modelPath: config.modelPath,
       mmprojPath: config.mmprojPath,
       contextSize: config.contextSize,
+      memorySafety: config.memorySafety,
+      memory: config.model?.memory,
       gpuLayers: config.gpuLayers,
       threads: config.threads,
       debug: config.debug,
