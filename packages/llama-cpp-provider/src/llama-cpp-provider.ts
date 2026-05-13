@@ -22,6 +22,7 @@ function createLlamaCpp(): LlamaCppProvider {
       gpuLayers: config.gpuLayers,
       threads: config.threads,
       debug: config.debug,
+      cache: config.cache,
       chatTemplate: config.model?.chatTemplate,
       reasoning: config.model?.reasoning,
     };

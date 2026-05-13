@@ -112,6 +112,8 @@ public:
     result.Set("text", Napi::String::New(Env(), result_.text));
     result.Set("promptTokens", Napi::Number::New(Env(), result_.prompt_tokens));
     result.Set("completionTokens", Napi::Number::New(Env(), result_.completion_tokens));
+    result.Set("cacheReadTokens", Napi::Number::New(Env(), result_.cache_read_tokens));
+    result.Set("cacheWriteTokens", Napi::Number::New(Env(), result_.cache_write_tokens));
     result.Set("finishReason", Napi::String::New(Env(), result_.finish_reason));
     if (!result_.error_message.empty()) {
       result.Set("errorMessage", Napi::String::New(Env(), result_.error_message));
@@ -175,6 +177,8 @@ public:
     result.Set("text", Napi::String::New(Env(), result_.text));
     result.Set("promptTokens", Napi::Number::New(Env(), result_.prompt_tokens));
     result.Set("completionTokens", Napi::Number::New(Env(), result_.completion_tokens));
+    result.Set("cacheReadTokens", Napi::Number::New(Env(), result_.cache_read_tokens));
+    result.Set("cacheWriteTokens", Napi::Number::New(Env(), result_.cache_write_tokens));
     result.Set("finishReason", Napi::String::New(Env(), result_.finish_reason));
     if (!result_.error_message.empty()) {
       result.Set("errorMessage", Napi::String::New(Env(), result_.error_message));
@@ -378,6 +382,8 @@ Napi::Value Generate(const Napi::CallbackInfo &info) {
   if (options.Has("grammar") && options.Get("grammar").IsString()) {
     params.grammar = options.Get("grammar").As<Napi::String>().Utf8Value();
   }
+  params.prompt_cache =
+      options.Has("promptCache") ? options.Get("promptCache").As<Napi::Boolean>().Value() : false;
 
   auto worker = new GenerateWorker(callback, handle, messages, params);
   worker->Queue();
@@ -427,6 +433,8 @@ Napi::Value GenerateStream(const Napi::CallbackInfo &info) {
   if (options.Has("grammar") && options.Get("grammar").IsString()) {
     params.grammar = options.Get("grammar").As<Napi::String>().Utf8Value();
   }
+  params.prompt_cache =
+      options.Has("promptCache") ? options.Get("promptCache").As<Napi::Boolean>().Value() : false;
 
   // Create thread-safe function for streaming tokens to JavaScript
   Napi::ThreadSafeFunction tsfn =

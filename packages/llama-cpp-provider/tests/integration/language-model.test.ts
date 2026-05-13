@@ -9,6 +9,8 @@ vi.mock("../../src/native-binding.js", () => ({
     text: "Mock response text",
     promptTokens: 50,
     completionTokens: 10,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 50,
     finishReason: "stop",
   }),
   generateStream: vi.fn((handle, opts, onToken) => {
@@ -21,6 +23,8 @@ vi.mock("../../src/native-binding.js", () => ({
       text: "Hello world!",
       promptTokens: 30,
       completionTokens: 4,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 30,
       finishReason: "stop",
     });
   }),
@@ -98,6 +102,25 @@ describe("LlamaCppLanguageModel Integration", () => {
       expect(result.usage.outputTokens.total).toBe(10);
     });
 
+    it("returns cache usage statistics when native result includes them", async () => {
+      vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
+        text: "Cached response",
+        promptTokens: 50,
+        completionTokens: 10,
+        cacheReadTokens: 40,
+        cacheWriteTokens: 10,
+        finishReason: "stop",
+      });
+
+      const result = await model.doGenerate({
+        prompt: testMessages,
+      });
+
+      expect(result.usage.inputTokens.noCache).toBe(10);
+      expect(result.usage.inputTokens.cacheRead).toBe(40);
+      expect(result.usage.inputTokens.cacheWrite).toBe(10);
+    });
+
     it("returns empty warnings array", async () => {
       const result = await model.doGenerate({
         prompt: testMessages,
@@ -153,6 +176,26 @@ describe("LlamaCppLanguageModel Integration", () => {
           stopSequences: ["END"],
         })
       );
+    });
+
+    it("enables native prompt cache when configured", async () => {
+      const cachedModel = new LlamaCppLanguageModel({
+        modelPath: "/test/model.gguf",
+        cache: { mode: "prefix" },
+      });
+
+      await cachedModel.doGenerate({
+        prompt: testMessages,
+      });
+
+      expect(nativeBinding.generate).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          promptCache: true,
+        })
+      );
+
+      await cachedModel.dispose();
     });
 
     it("passes messages correctly to native binding", async () => {
@@ -494,6 +537,32 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       expect(finishPart?.usage?.inputTokens.total).toBe(30);
       expect(finishPart?.usage?.outputTokens.total).toBe(4);
+    });
+
+    it("finish part contains cache usage", async () => {
+      vi.mocked(nativeBinding.generateStream).mockImplementationOnce(
+        (handle, opts, onToken) => {
+          onToken("Hello");
+          return Promise.resolve({
+            text: "Hello",
+            promptTokens: 30,
+            completionTokens: 1,
+            cacheReadTokens: 20,
+            cacheWriteTokens: 10,
+            finishReason: "stop",
+          });
+        }
+      );
+
+      const { stream } = await model.doStream({
+        prompt: testMessages,
+      });
+
+      const parts = await collectStreamParts(stream);
+      const finishPart = parts.find((p) => p.type === "finish");
+
+      expect(finishPart?.usage?.inputTokens.cacheRead).toBe(20);
+      expect(finishPart?.usage?.inputTokens.cacheWrite).toBe(10);
     });
 
     it("all text-delta parts share the same id", async () => {

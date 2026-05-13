@@ -3,6 +3,7 @@
 
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -47,12 +48,15 @@ struct GenerationParams {
   float repeat_penalty = 1.1f;
   std::vector<std::string> stop_sequences;
   std::string grammar; // GBNF grammar string for structured output
+  bool prompt_cache = false;
 };
 
 struct GenerationResult {
   std::string text;
   int prompt_tokens;
   int completion_tokens;
+  int cache_read_tokens;
+  int cache_write_tokens;
   std::string finish_reason; // "stop", "length", or "error"
   std::string error_message;
 };
@@ -116,6 +120,8 @@ private:
   std::string mmproj_path_;
   std::string chat_template_;
   int n_batch_ = 512; // Batch size for prompt processing
+  std::vector<int32_t> cached_tokens_;
+  std::mutex inference_mutex_;
 
   // Tokenize a string
   std::vector<int32_t> tokenize(const std::string &text, bool add_bos);
@@ -131,6 +137,12 @@ private:
 
   // Check if token is end-of-sequence
   bool is_eos_token(int32_t token);
+
+  void clear_context_memory(bool data);
+  bool trim_cached_tokens(size_t keep_tokens);
+  size_t matching_cached_prefix(const std::vector<int32_t> &tokens) const;
+  bool decode_tokens(const std::vector<int32_t> &tokens, size_t offset, size_t count, int start_pos,
+                     bool logits_last, GenerationResult &result, const std::string &error_message);
 
   // Prefill the prompt into the context and return the number of consumed positions.
   bool prefill_prompt(const std::string &prompt,

@@ -31,6 +31,7 @@ import {
 } from "./json-schema-to-grammar.js";
 import {
   thinkTagsReasoning,
+  type LlamaCppCacheConfig,
   type LlamaCppMemorySafetyConfig,
   type LlamaCppModelMemoryInfo,
   type LlamaCppReasoningConfig,
@@ -77,6 +78,7 @@ export interface LlamaCppModelConfig {
    * Extract model thinking into AI SDK reasoning parts.
    */
   reasoning?: LlamaCppReasoningConfig;
+  cache?: LlamaCppCacheConfig;
 }
 
 export interface LlamaCppGenerationConfig {
@@ -391,14 +393,21 @@ export function convertFinishReason(
 
 export function convertUsage(
   promptTokens: number,
-  completionTokens: number
+  completionTokens: number,
+  cache?: {
+    read?: number;
+    write?: number;
+  }
 ): LanguageModelV4Usage {
   return {
     inputTokens: {
       total: promptTokens,
-      noCache: undefined,
-      cacheRead: undefined,
-      cacheWrite: undefined,
+      noCache:
+        cache?.read !== undefined || cache?.write !== undefined
+          ? promptTokens - (cache.read ?? 0)
+          : undefined,
+      cacheRead: cache?.read,
+      cacheWrite: cache?.write,
     },
     outputTokens: {
       total: completionTokens,
@@ -887,6 +896,9 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       stopSequences: options.stopSequences,
       grammar,
     };
+    if (this.config.cache?.mode === "prefix") {
+      generateOptions.promptCache = true;
+    }
     validateGenerationContextSize(
       this.loadedContextSize,
       generateOptions.maxTokens
@@ -936,7 +948,10 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
     return {
       content,
       finishReason,
-      usage: convertUsage(result.promptTokens, result.completionTokens),
+      usage: convertUsage(result.promptTokens, result.completionTokens, {
+        read: result.cacheReadTokens,
+        write: result.cacheWriteTokens,
+      }),
       warnings,
       request: {
         body: generateOptions,
@@ -991,6 +1006,9 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       stopSequences: options.stopSequences,
       grammar,
     };
+    if (this.config.cache?.mode === "prefix") {
+      generateOptions.promptCache = true;
+    }
     validateGenerationContextSize(
       this.loadedContextSize,
       generateOptions.maxTokens
@@ -1181,7 +1199,10 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
           controller.enqueue({
             type: "finish",
             finishReason,
-            usage: convertUsage(result.promptTokens, result.completionTokens),
+            usage: convertUsage(result.promptTokens, result.completionTokens, {
+              read: result.cacheReadTokens,
+              write: result.cacheWriteTokens,
+            }),
           });
 
           controller.close();

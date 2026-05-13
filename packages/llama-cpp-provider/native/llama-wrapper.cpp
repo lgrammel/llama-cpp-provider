@@ -31,7 +31,8 @@ LlamaModel::~LlamaModel() {
 LlamaModel::LlamaModel(LlamaModel &&other) noexcept
     : model_(other.model_), ctx_(other.ctx_), sampler_(other.sampler_), mtmd_ctx_(other.mtmd_ctx_),
       model_path_(std::move(other.model_path_)), mmproj_path_(std::move(other.mmproj_path_)),
-      chat_template_(std::move(other.chat_template_)), n_batch_(other.n_batch_) {
+      chat_template_(std::move(other.chat_template_)), n_batch_(other.n_batch_),
+      cached_tokens_(std::move(other.cached_tokens_)) {
   other.model_ = nullptr;
   other.ctx_ = nullptr;
   other.sampler_ = nullptr;
@@ -49,6 +50,7 @@ LlamaModel &LlamaModel::operator=(LlamaModel &&other) noexcept {
     mmproj_path_ = std::move(other.mmproj_path_);
     chat_template_ = std::move(other.chat_template_);
     n_batch_ = other.n_batch_;
+    cached_tokens_ = std::move(other.cached_tokens_);
     other.model_ = nullptr;
     other.ctx_ = nullptr;
     other.sampler_ = nullptr;
@@ -125,6 +127,7 @@ void LlamaModel::unload() {
   }
   model_path_.clear();
   mmproj_path_.clear();
+  cached_tokens_.clear();
 }
 
 bool LlamaModel::create_context(const ContextParams &params) {
@@ -135,6 +138,7 @@ bool LlamaModel::create_context(const ContextParams &params) {
   if (ctx_) {
     llama_free(ctx_);
     ctx_ = nullptr;
+    cached_tokens_.clear();
   }
 
   llama_context_params ctx_params = llama_context_default_params();
@@ -169,6 +173,7 @@ void LlamaModel::normalize_embedding(float *embedding, int n_embd) {
 }
 
 EmbeddingResult LlamaModel::embed(const std::vector<std::string> &texts) {
+  std::lock_guard<std::mutex> lock(inference_mutex_);
   EmbeddingResult result;
   result.total_tokens = 0;
 
@@ -193,11 +198,8 @@ EmbeddingResult LlamaModel::embed(const std::vector<std::string> &texts) {
       continue;
     }
 
-    // Clear the memory/KV cache
-    llama_memory_t mem = llama_get_memory(ctx_);
-    if (mem) {
-      llama_memory_clear(mem, true);
-    }
+    clear_context_memory(true);
+    cached_tokens_.clear();
 
     // Create batch with sequence ID
     llama_batch batch = llama_batch_init(tokens.size(), 0, 1);
@@ -362,17 +364,81 @@ bool LlamaModel::is_eos_token(int32_t token) {
   return llama_vocab_is_eog(vocab, token);
 }
 
+void LlamaModel::clear_context_memory(bool data) {
+  llama_memory_t mem = llama_get_memory(ctx_);
+  if (mem) {
+    llama_memory_clear(mem, data);
+  }
+}
+
+bool LlamaModel::trim_cached_tokens(size_t keep_tokens) {
+  if (keep_tokens >= cached_tokens_.size()) {
+    return true;
+  }
+
+  llama_memory_t mem = llama_get_memory(ctx_);
+  if (!mem) {
+    cached_tokens_.clear();
+    return false;
+  }
+
+  const bool removed_suffix = llama_memory_seq_rm(mem, 0, static_cast<llama_pos>(keep_tokens), -1);
+  if (!removed_suffix) {
+    clear_context_memory(true);
+    cached_tokens_.clear();
+    return false;
+  }
+
+  cached_tokens_.resize(keep_tokens);
+  return true;
+}
+
+size_t LlamaModel::matching_cached_prefix(const std::vector<int32_t> &tokens) const {
+  const size_t max_prefix = std::min(cached_tokens_.size(), tokens.size());
+  size_t prefix = 0;
+  while (prefix < max_prefix && cached_tokens_[prefix] == tokens[prefix]) {
+    prefix++;
+  }
+  return prefix;
+}
+
+bool LlamaModel::decode_tokens(const std::vector<int32_t> &tokens, size_t offset, size_t count,
+                               int start_pos, bool logits_last, GenerationResult &result,
+                               const std::string &error_message) {
+  size_t n_processed = 0;
+
+  while (n_processed < count) {
+    const size_t n_chunk = std::min(static_cast<size_t>(n_batch_), count - n_processed);
+    llama_batch batch = llama_batch_init(static_cast<int32_t>(n_chunk), 0, 1);
+
+    for (size_t i = 0; i < n_chunk; i++) {
+      const size_t token_index = offset + n_processed + i;
+      batch.token[i] = tokens[token_index];
+      batch.pos[i] = static_cast<llama_pos>(start_pos + n_processed + i);
+      batch.n_seq_id[i] = 1;
+      batch.seq_id[i][0] = 0;
+      batch.logits[i] = logits_last && n_processed + i == count - 1;
+    }
+    batch.n_tokens = static_cast<int32_t>(n_chunk);
+
+    if (llama_decode(ctx_, batch) != 0) {
+      llama_batch_free(batch);
+      result.error_message = error_message;
+      return false;
+    }
+
+    llama_batch_free(batch);
+    n_processed += n_chunk;
+  }
+
+  return true;
+}
+
 bool LlamaModel::prefill_prompt(const std::string &prompt,
                                 const std::vector<std::vector<unsigned char>> &images,
                                 const GenerationParams &params, GenerationResult &result,
                                 int &n_past) {
   n_past = 0;
-
-  // Clear the memory/KV cache
-  llama_memory_t mem = llama_get_memory(ctx_);
-  if (mem) {
-    llama_memory_clear(mem, true);
-  }
 
   if (images.empty()) {
     // Tokenize the prompt
@@ -385,25 +451,42 @@ bool LlamaModel::prefill_prompt(const std::string &prompt,
       return false;
     }
 
-    // Process prompt in chunks if it exceeds batch size (chunked prefill)
-    size_t n_tokens = prompt_tokens.size();
-    size_t n_processed = 0;
-
-    while (n_processed < n_tokens) {
-      size_t n_chunk = std::min(static_cast<size_t>(n_batch_), n_tokens - n_processed);
-      llama_batch batch = llama_batch_get_one(prompt_tokens.data() + n_processed, n_chunk);
-
-      if (llama_decode(ctx_, batch) != 0) {
-        result.error_message = "Failed to decode prompt";
-        return false;
-      }
-
-      n_processed += n_chunk;
+    size_t cached_prefix = params.prompt_cache ? matching_cached_prefix(prompt_tokens) : 0;
+    if (cached_prefix == prompt_tokens.size() && cached_prefix < cached_tokens_.size() &&
+        cached_prefix > 0) {
+      // If the next prompt is a shorter prefix of cached state, re-evaluate the
+      // last kept token so llama.cpp logits correspond to the new prompt end.
+      cached_prefix--;
     }
+    if (params.prompt_cache && cached_prefix > 0) {
+      if (!trim_cached_tokens(cached_prefix)) {
+        cached_prefix = 0;
+      }
+    }
+    if (!params.prompt_cache || cached_prefix == 0) {
+      clear_context_memory(true);
+      cached_tokens_.clear();
+      cached_prefix = 0;
+    }
+
+    const size_t suffix_tokens = prompt_tokens.size() - cached_prefix;
+    if (suffix_tokens > 0 &&
+        !decode_tokens(prompt_tokens, cached_prefix, suffix_tokens, static_cast<int>(cached_prefix),
+                       true, result, "Failed to decode prompt")) {
+      cached_tokens_.clear();
+      return false;
+    }
+
+    result.cache_read_tokens = static_cast<int>(cached_prefix);
+    result.cache_write_tokens = static_cast<int>(suffix_tokens);
+    cached_tokens_ = prompt_tokens;
 
     n_past = static_cast<int>(prompt_tokens.size());
     return true;
   }
+
+  clear_context_memory(true);
+  cached_tokens_.clear();
 
   if (!mtmd_ctx_) {
     result.error_message = "Image inputs require mmprojPath to be configured";
@@ -461,6 +544,7 @@ bool LlamaModel::prefill_prompt(const std::string &prompt,
   }
 
   n_past = static_cast<int>(new_n_past);
+  result.cache_write_tokens = n_past;
   const int n_ctx = llama_n_ctx(ctx_);
   if (n_past + params.max_tokens > n_ctx) {
     result.error_message = "Prompt tokens plus max_tokens exceed context size";
@@ -471,10 +555,16 @@ bool LlamaModel::prefill_prompt(const std::string &prompt,
 
 GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
                                       const GenerationParams &params) {
+  std::lock_guard<std::mutex> lock(inference_mutex_);
   GenerationResult result;
   result.finish_reason = "error";
+  result.prompt_tokens = 0;
+  result.completion_tokens = 0;
+  result.cache_read_tokens = 0;
+  result.cache_write_tokens = 0;
 
   if (!ctx_ || !model_) {
+    result.error_message = "Model context is not initialized";
     return result;
   }
 
@@ -491,8 +581,6 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
   for (const auto &message : messages) {
     images.insert(images.end(), message.images.begin(), message.images.end());
   }
-
-  result.completion_tokens = 0;
 
   // Create sampler
   create_sampler(params);
@@ -537,13 +625,18 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
     if (should_stop)
       break;
 
-    // Prepare for next iteration
-    llama_batch token_batch = llama_batch_get_one(&new_token, 1);
-    if (llama_decode(ctx_, token_batch) != 0) {
+    std::vector<int32_t> token = {new_token};
+    cached_tokens_.push_back(new_token);
+    if (!decode_tokens(token, 0, 1, n_cur, true, result, "Failed to decode generated token")) {
       result.error_message = "Failed to decode generated token";
+      cached_tokens_.pop_back();
       break;
     }
     n_cur++;
+  }
+
+  if (!params.prompt_cache) {
+    cached_tokens_.clear();
   }
 
   if (result.finish_reason == "error" && result.completion_tokens >= params.max_tokens) {
@@ -559,8 +652,13 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
 GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &messages,
                                                 const GenerationParams &params,
                                                 TokenCallback callback) {
+  std::lock_guard<std::mutex> lock(inference_mutex_);
   GenerationResult result;
   result.finish_reason = "error";
+  result.prompt_tokens = 0;
+  result.completion_tokens = 0;
+  result.cache_read_tokens = 0;
+  result.cache_write_tokens = 0;
 
   if (!ctx_ || !model_) {
     result.error_message = "Model context is not initialized";
@@ -580,8 +678,6 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
   for (const auto &message : messages) {
     images.insert(images.end(), message.images.begin(), message.images.end());
   }
-
-  result.completion_tokens = 0;
 
   // Create sampler
   create_sampler(params);
@@ -630,13 +726,18 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
     if (should_stop)
       break;
 
-    // Prepare for next iteration
-    llama_batch token_batch = llama_batch_get_one(&new_token, 1);
-    if (llama_decode(ctx_, token_batch) != 0) {
+    std::vector<int32_t> token = {new_token};
+    cached_tokens_.push_back(new_token);
+    if (!decode_tokens(token, 0, 1, n_cur, true, result, "Failed to decode generated token")) {
       result.error_message = "Failed to decode generated token";
+      cached_tokens_.pop_back();
       break;
     }
     n_cur++;
+  }
+
+  if (!params.prompt_cache) {
+    cached_tokens_.clear();
   }
 
   if (result.finish_reason == "error" && result.completion_tokens >= params.max_tokens) {

@@ -52,12 +52,16 @@ export interface GenerateOptions {
   stopSequences?: string[];
   /** GBNF grammar string for structured output */
   grammar?: string;
+  /** Reuse matching prompt prefixes from the previous request on this model. */
+  promptCache?: boolean;
 }
 
 export interface GenerateResult {
   text: string;
   promptTokens: number;
   completionTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   finishReason: "stop" | "length" | "error";
   errorMessage?: string;
 }
