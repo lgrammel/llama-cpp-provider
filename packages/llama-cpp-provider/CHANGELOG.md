@@ -1,5 +1,11 @@
 # @lgrammel/llama-cpp-provider
 
+## 0.2.0
+
+### Minor Changes
+
+- Add opt-in prefix prompt caching for language model calls, including cache read/write token accounting.
+
 ## 0.1.1
 
 ### Patch Changes
