@@ -11,6 +11,10 @@ set(LLAMA_BUILD_TESTS OFF CACHE BOOL "Disable llama.cpp tests" FORCE)
 set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "Disable llama.cpp examples" FORCE)
 set(LLAMA_BUILD_SERVER OFF CACHE BOOL "Disable llama.cpp server" FORCE)
 
+# Avoid llama.cpp runtime CPU feature probes during package installation.
+# On Apple Silicon, the native SVE probe can hang during CMake configure.
+set(GGML_NATIVE OFF CACHE BOOL "Disable native CPU feature probing" FORCE)
+
 # Enable Metal on macOS
 if(APPLE)
     set(GGML_METAL ON CACHE BOOL "Enable Metal support" FORCE)
