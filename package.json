@@ -26,15 +26,15 @@
     "typecheck": "pnpm --filter @lgrammel/llama-cpp-provider typecheck && pnpm --filter @examples/basic typecheck && pnpm --filter @tests/e2e typecheck",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
-    "format:check": "oxfmt --check \"packages/*/src/**/*.ts\" \"packages/*/tests/**/*.ts\" \"examples/**/*.ts\" \"tests/**/*.ts\" && clang-format --dry-run --Werror packages/ai-sdk-llama-cpp/native/*.cpp packages/ai-sdk-llama-cpp/native/*.h",
-    "format:fix": "oxfmt --write \"packages/*/src/**/*.ts\" \"packages/*/tests/**/*.ts\" \"examples/**/*.ts\" \"tests/**/*.ts\" && clang-format -i packages/ai-sdk-llama-cpp/native/*.cpp packages/ai-sdk-llama-cpp/native/*.h"
+    "format:check": "oxfmt --check \"packages/*/src/**/*.ts\" \"packages/*/tests/**/*.ts\" \"examples/**/*.ts\" \"tests/**/*.ts\" && clang-format --dry-run --Werror packages/llama-cpp-provider/native/*.cpp packages/llama-cpp-provider/native/*.h",
+    "format:fix": "oxfmt --write \"packages/*/src/**/*.ts\" \"packages/*/tests/**/*.ts\" \"examples/**/*.ts\" \"tests/**/*.ts\" && clang-format -i packages/llama-cpp-provider/native/*.cpp packages/llama-cpp-provider/native/*.h"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
       "oxlint --fix",
       "oxfmt --write"
     ],
-    "packages/ai-sdk-llama-cpp/native/*.{cpp,h}": [
+    "packages/llama-cpp-provider/native/*.{cpp,h}": [
       "clang-format -i"
     ]
   },

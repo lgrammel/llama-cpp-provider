@@ -67,10 +67,10 @@ The `pnpm install` step automatically:
 
 ### Updating And Building llama.cpp
 
-The llama.cpp source is fetched during package installation from the `llamaCpp` config in `packages/ai-sdk-llama-cpp/package.json`. To update the pinned upstream revision:
+The llama.cpp source is fetched during package installation from the `llamaCpp` config in `packages/llama-cpp-provider/package.json`. To update the pinned upstream revision:
 
 1. Choose the upstream commit from `https://github.com/ggerganov/llama.cpp`.
-2. Update `packages/ai-sdk-llama-cpp/package.json`:
+2. Update `packages/llama-cpp-provider/package.json`:
    - Keep `llamaCpp.repo` pointing at the upstream repository unless intentionally changing forks.
    - Set `llamaCpp.commit` to the new commit SHA.
 3. Remove the existing local checkout and native build artifacts:
@@ -94,7 +94,7 @@ pnpm build:ts
 pnpm test:run
 ```
 
-If llama.cpp API changes break the native wrapper, update `packages/ai-sdk-llama-cpp/native/llama-wrapper.cpp`, `packages/ai-sdk-llama-cpp/native/llama-wrapper.h`, and `packages/ai-sdk-llama-cpp/native/binding.cpp` as needed, then rerun `pnpm build:native`.
+If llama.cpp API changes break the native wrapper, update `packages/llama-cpp-provider/native/llama-wrapper.cpp`, `packages/llama-cpp-provider/native/llama-wrapper.h`, and `packages/llama-cpp-provider/native/binding.cpp` as needed, then rerun `pnpm build:native`.
 
 ## Project Structure
 
@@ -135,8 +135,8 @@ If llama.cpp API changes break the native wrapper, update `packages/ai-sdk-llama
 
 ### Test Organization
 
-- **Unit tests** (`packages/ai-sdk-llama-cpp/tests/unit/`): Test pure functions and class instantiation. No model or native bindings required.
-- **Integration tests** (`packages/ai-sdk-llama-cpp/tests/integration/`): Test the language model class with mocked native bindings.
+- **Unit tests** (`packages/llama-cpp-provider/tests/unit/`): Test pure functions and class instantiation. No model or native bindings required.
+- **Integration tests** (`packages/llama-cpp-provider/tests/integration/`): Test the language model class with mocked native bindings.
 - **E2E tests** (`tests/e2e/`): Test actual inference with a real GGUF model file. This is a separate workspace package (`@tests/e2e`).
 
 ### Running Tests
@@ -175,7 +175,7 @@ TEST_MODEL_PATH=./models/Llama-3.2-1B-Instruct-Q4_K_M.gguf pnpm test:e2e
 ### Writing Tests
 
 - Use Vitest (`describe`, `it`, `expect`)
-- Unit/integration tests are in `packages/ai-sdk-llama-cpp/tests/**/*.test.ts`
+- Unit/integration tests are in `packages/llama-cpp-provider/tests/**/*.test.ts`
 - E2E tests are in `tests/e2e/src/**/*.test.ts`
 - Test timeout is 120 seconds (configured in `vitest.config.ts`)
 - E2E tests use a `describeE2E` pattern that skips tests when `TEST_MODEL_PATH` is not set
@@ -321,16 +321,16 @@ try {
 
 ### Adding a New Feature
 
-1. Implement in appropriate `packages/ai-sdk-llama-cpp/src/` file
+1. Implement in appropriate `packages/llama-cpp-provider/src/` file
 2. Export from `src/index.ts` if public API
-3. Add unit tests in `packages/ai-sdk-llama-cpp/tests/unit/`
-4. Add integration tests in `packages/ai-sdk-llama-cpp/tests/integration/`
+3. Add unit tests in `packages/llama-cpp-provider/tests/unit/`
+4. Add integration tests in `packages/llama-cpp-provider/tests/integration/`
 5. Run `pnpm test:run` to verify
 6. Build with `pnpm build:ts`
 
 ### Modifying Native Bindings
 
-1. Edit files in `packages/ai-sdk-llama-cpp/native/`
+1. Edit files in `packages/llama-cpp-provider/native/`
 2. Rebuild with `pnpm build:native`
 3. Test with `pnpm test:run`
 

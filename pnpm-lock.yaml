@@ -31,7 +31,7 @@ importers:
         version: 0.2.0(typescript@5.9.3)(zod@4.3.5)
       '@lgrammel/llama-cpp-provider':
         specifier: workspace:*
-        version: link:../../packages/ai-sdk-llama-cpp
+        version: link:../../packages/llama-cpp-provider
       ai:
         specifier: 7.0.0-canary.130
         version: 7.0.0-canary.130(zod@4.3.5)
@@ -49,7 +49,7 @@ importers:
         specifier: ^5.3.0
         version: 5.9.3
 
-  packages/ai-sdk-llama-cpp:
+  packages/llama-cpp-provider:
     dependencies:
       '@ai-sdk/provider':
         specifier: 4.0.0-canary.16
@@ -78,7 +78,7 @@ importers:
     dependencies:
       '@lgrammel/llama-cpp-provider':
         specifier: workspace:*
-        version: link:../../packages/ai-sdk-llama-cpp
+        version: link:../../packages/llama-cpp-provider
       ai:
         specifier: 7.0.0-canary.130
         version: 7.0.0-canary.130(zod@4.3.5)

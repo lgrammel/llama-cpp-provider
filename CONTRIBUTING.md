@@ -95,8 +95,8 @@ pnpm generate-text
 
 ### Testing Requirements
 
-- Add **unit tests** for new pure functions in `packages/ai-sdk-llama-cpp/tests/unit/`
-- Add **integration tests** for new model behavior in `packages/ai-sdk-llama-cpp/tests/integration/`
+- Add **unit tests** for new pure functions in `packages/llama-cpp-provider/tests/unit/`
+- Add **integration tests** for new model behavior in `packages/llama-cpp-provider/tests/integration/`
 - Ensure all existing tests pass before submitting
 
 ### Pull Request Guidelines
@@ -197,7 +197,7 @@ This will build the TypeScript and publish the package to npm.
 After publishing, create and push a git tag:
 
 ```bash
-git tag v$(node -p "require('./packages/ai-sdk-llama-cpp/package.json').version")
+git tag v$(node -p "require('./packages/llama-cpp-provider/package.json').version")
 git push --tags
 ```
 

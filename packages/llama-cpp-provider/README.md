@@ -395,16 +395,16 @@ pnpm build:native
 pnpm test:run
 ```
 
-The native build is configured by `packages/ai-sdk-llama-cpp/CMakeLists.txt` and `packages/ai-sdk-llama-cpp/native/CMakeLists.txt`.
+The native build is configured by `packages/llama-cpp-provider/CMakeLists.txt` and `packages/llama-cpp-provider/native/CMakeLists.txt`.
 
 ### Updating llama.cpp
 
-The llama.cpp source is fetched during package installation from the `llamaCpp` config in `packages/ai-sdk-llama-cpp/package.json`.
+The llama.cpp source is fetched during package installation from the `llamaCpp` config in `packages/llama-cpp-provider/package.json`.
 
 To update the pinned upstream revision:
 
 1. Choose the upstream commit from [ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp).
-2. Update `llamaCpp.commit` in `packages/ai-sdk-llama-cpp/package.json`.
+2. Update `llamaCpp.commit` in `packages/llama-cpp-provider/package.json`.
 3. Keep `llamaCpp.repo` unchanged unless intentionally switching forks.
 4. Remove the old checkout and build artifacts:
 
@@ -426,7 +426,7 @@ pnpm build:ts
 pnpm test:run
 ```
 
-If upstream API changes break the native wrapper, update `packages/ai-sdk-llama-cpp/native/llama-wrapper.cpp`, `packages/ai-sdk-llama-cpp/native/llama-wrapper.h`, and `packages/ai-sdk-llama-cpp/native/binding.cpp`, then rerun `pnpm build:native`.
+If upstream API changes break the native wrapper, update `packages/llama-cpp-provider/native/llama-wrapper.cpp`, `packages/llama-cpp-provider/native/llama-wrapper.h`, and `packages/llama-cpp-provider/native/binding.cpp`, then rerun `pnpm build:native`.
 
 ## Limitations
 
