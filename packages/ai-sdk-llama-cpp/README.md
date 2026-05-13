@@ -1,4 +1,4 @@
-# ai-sdk-llama-cpp
+# @lgrammel/llama-cpp-provider
 
 > **Alpha Software**: This package is in early development. APIs may change between versions.
 
@@ -37,7 +37,7 @@ Installation on Windows or Linux will fail because this package currently builds
 ## Installation
 
 ```bash
-npm install ai-sdk-llama-cpp
+npm install @lgrammel/llama-cpp-provider
 ```
 
 During installation, the package:
@@ -53,7 +53,7 @@ Download a GGUF model, then pass its local path to `llamaCpp`.
 
 ```typescript
 import { generateText } from "ai";
-import { llamaCpp } from "ai-sdk-llama-cpp";
+import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 
 const model = llamaCpp({
   modelPath: "./models/llama-3.2-1b-instruct.Q4_K_M.gguf",
@@ -82,7 +82,7 @@ Image inputs require a vision-capable GGUF model and its matching multimodal pro
 ```typescript
 import { readFile } from "node:fs/promises";
 import { generateText } from "ai";
-import { llamaCpp } from "ai-sdk-llama-cpp";
+import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 
 const model = llamaCpp({
   modelPath: "./models/gemma-4-31B-it-Q4_K_M.gguf",
@@ -125,7 +125,7 @@ Inline `Uint8Array`, base64 data, and data URL image parts are supported. Local 
 
 ```typescript
 import { streamText } from "ai";
-import { llamaCpp } from "ai-sdk-llama-cpp";
+import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 
 const model = llamaCpp({
   modelPath: "./models/your-model.gguf",
@@ -152,7 +152,7 @@ Structured output uses GBNF grammar constraints so the model generates JSON that
 ```typescript
 import { generateObject } from "ai";
 import { z } from "zod";
-import { llamaCpp } from "ai-sdk-llama-cpp";
+import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 
 const model = llamaCpp({
   modelPath: "./models/your-model.gguf",
@@ -189,7 +189,7 @@ Use AI SDK tools with local models. Tool calling also works with `streamText`; t
 ```typescript
 import { generateText, stepCountIs, tool } from "ai";
 import { z } from "zod";
-import { llamaCpp } from "ai-sdk-llama-cpp";
+import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 
 const model = llamaCpp({
   modelPath: "./models/your-model.gguf",
@@ -226,7 +226,7 @@ Tool calling quality depends on the model. Models fine-tuned for function callin
 
 ```typescript
 import { embed, embedMany } from "ai";
-import { llamaCpp } from "ai-sdk-llama-cpp";
+import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 
 const model = llamaCpp.embedding({
   modelPath: "./models/nomic-embed-text-v1.5.Q4_K_M.gguf",
@@ -255,7 +255,7 @@ Set `model.reasoning` to extract model thinking into AI SDK reasoning parts. Wit
 
 ```typescript
 import { generateText } from "ai";
-import { llamaCpp } from "ai-sdk-llama-cpp";
+import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 
 const model = llamaCpp({
   modelPath: "./models/your-model.gguf",
@@ -280,7 +280,7 @@ try {
 For Gemma 4 thinking support, use the exported model info presets:
 
 ```typescript
-import { gemma4_31b_it, llamaCpp } from "ai-sdk-llama-cpp";
+import { gemma4_31b_it, llamaCpp } from "@lgrammel/llama-cpp-provider";
 
 const model = llamaCpp({
   modelPath: "./models/gemma-4-31b-it.Q4_K_M.gguf",
@@ -409,7 +409,7 @@ To update the pinned upstream revision:
 4. Remove the old checkout and build artifacts:
 
 ```bash
-pnpm --filter ai-sdk-llama-cpp clean
+pnpm --filter @lgrammel/llama-cpp-provider clean
 ```
 
 5. Fetch the new llama.cpp revision and rebuild the native addon:

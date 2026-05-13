@@ -24,7 +24,7 @@ jobs:
         run: pnpm install --ignore-scripts
 
       - name: Build TypeScript (for workspace dependencies)
-        run: pnpm --filter ai-sdk-llama-cpp build:ts
+        run: pnpm --filter @lgrammel/llama-cpp-provider build:ts
 
       - name: Run type checks
         run: pnpm typecheck

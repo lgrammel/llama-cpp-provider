@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for your interest in contributing to ai-sdk-llama-cpp!
+Thank you for your interest in contributing to @lgrammel/llama-cpp-provider!
 
 ## Prerequisites
 
@@ -119,7 +119,7 @@ pnpm changeset
 ```
 
 This will prompt you to:
-1. Select the `ai-sdk-llama-cpp` package
+1. Select the `@lgrammel/llama-cpp-provider` package
 2. Choose the semver bump type:
    - **patch**: Bug fixes, documentation updates
    - **minor**: New features, non-breaking changes

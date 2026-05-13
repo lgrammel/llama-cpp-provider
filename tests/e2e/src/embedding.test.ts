@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { embed, embedMany } from "ai";
-import { llamaCpp, type LlamaCppEmbeddingModel } from "ai-sdk-llama-cpp";
+import {
+  llamaCpp,
+  type LlamaCppEmbeddingModel,
+} from "@lgrammel/llama-cpp-provider";
 
 /**
  * E2E tests for the llama.cpp embedding provider.

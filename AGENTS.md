@@ -4,7 +4,7 @@ This file provides guidance for AI coding agents (Cursor, Copilot, Claude Code) 
 
 ## Project Overview
 
-**ai-sdk-llama-cpp** is a llama.cpp provider for the Vercel AI SDK, implementing the `LanguageModelV4` interface. It loads llama.cpp directly into Node.js memory via native C++ bindings for local LLM inference.
+**@lgrammel/llama-cpp-provider** is a llama.cpp provider for the Vercel AI SDK, implementing the `LanguageModelV4` interface. It loads llama.cpp directly into Node.js memory via native C++ bindings for local LLM inference.
 
 **Platform Support**: macOS only (Apple Silicon or Intel)
 
@@ -76,7 +76,7 @@ The llama.cpp source is fetched during package installation from the `llamaCpp` 
 3. Remove the existing local checkout and native build artifacts:
 
 ```bash
-pnpm --filter ai-sdk-llama-cpp clean
+pnpm --filter @lgrammel/llama-cpp-provider clean
 ```
 
 4. Reinstall or build the native addon so the postinstall script fetches the new llama.cpp revision:
@@ -205,7 +205,7 @@ Examples follow this pattern:
 
 ```typescript
 import { generateText } from "ai";
-import { llamaCpp } from "ai-sdk-llama-cpp";
+import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 
 // Create model instance with config
 const model = llamaCpp({ 
@@ -233,7 +233,7 @@ try {
 ### Creating New Examples
 
 1. Create a new file in `examples/basic/src/` directory
-2. Import from `"ai-sdk-llama-cpp"` (workspace dependency)
+2. Import from `"@lgrammel/llama-cpp-provider"` (workspace dependency)
 3. Use `try/finally` to ensure `model.dispose()` is called
 4. Update the model path to your local GGUF model
 5. Add a script to `examples/basic/package.json` (e.g., `"my-example": "tsx src/my-example.ts"`)
@@ -244,7 +244,7 @@ Example template:
 ```typescript
 import { generateText, streamText, Output } from "ai";
 import { z } from "zod";
-import { llamaCpp } from "ai-sdk-llama-cpp";
+import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 
 const model = llamaCpp({ 
   modelPath: "./models/your-model.gguf",
@@ -337,8 +337,8 @@ try {
 ### Debugging
 
 - Enable verbose llama.cpp output: `llamaCpp({ modelPath, debug: true })`
-- Run specific test: `pnpm --filter ai-sdk-llama-cpp exec vitest run tests/unit/provider.test.ts`
-- Debug build: `pnpm --filter ai-sdk-llama-cpp build:native:debug`
+- Run specific test: `pnpm --filter @lgrammel/llama-cpp-provider exec vitest run tests/unit/provider.test.ts`
+- Debug build: `pnpm --filter @lgrammel/llama-cpp-provider build:native:debug`
 
 ## Dependencies
 

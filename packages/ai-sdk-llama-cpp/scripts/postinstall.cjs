@@ -5,7 +5,7 @@ const path = require("path");
 // Step 1: Check platform is macOS
 if (process.platform !== "darwin") {
   console.error("\n===========================================");
-  console.error("ERROR: ai-sdk-llama-cpp only supports macOS");
+  console.error("ERROR: @lgrammel/llama-cpp-provider only supports macOS");
   console.error("===========================================\n");
   console.error(`Detected platform: ${process.platform}`);
   console.error("This package requires macOS for native compilation.\n");

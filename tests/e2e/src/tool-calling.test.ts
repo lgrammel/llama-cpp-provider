@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateText, tool, stepCountIs } from "ai";
 import { z } from "zod/v4";
-import { llamaCpp, LlamaCppLanguageModel } from "ai-sdk-llama-cpp";
+import { llamaCpp, LlamaCppLanguageModel } from "@lgrammel/llama-cpp-provider";
 
 /**
  * E2E tests for tool calling with llama.cpp.

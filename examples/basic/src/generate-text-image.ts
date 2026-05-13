@@ -1,7 +1,7 @@
 import { generateText } from "ai";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { llamaCpp } from "ai-sdk-llama-cpp";
+import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 import {
   exampleContextSize,
   exampleModel,

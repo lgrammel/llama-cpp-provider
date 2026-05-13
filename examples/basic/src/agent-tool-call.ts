@@ -1,7 +1,7 @@
 import { runAgentTUI } from "@lgrammel/agent-tui";
 import { ToolLoopAgent, stepCountIs, tool } from "ai";
 import { z } from "zod";
-import { llamaCpp } from "ai-sdk-llama-cpp";
+import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 import {
   exampleContextSize,
   exampleModel,

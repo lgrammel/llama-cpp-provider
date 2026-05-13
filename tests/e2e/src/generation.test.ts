@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateText, streamText } from "ai";
-import { llamaCpp, LlamaCppLanguageModel } from "ai-sdk-llama-cpp";
+import { llamaCpp, LlamaCppLanguageModel } from "@lgrammel/llama-cpp-provider";
 
 /**
  * E2E tests for the llama.cpp provider.

@@ -43,7 +43,7 @@ function createLlamaCpp(): LlamaCppProvider {
  *
  * @example
  * ```typescript
- * import { llamaCpp } from 'ai-sdk-llama-cpp';
+ * import { llamaCpp } from '@lgrammel/llama-cpp-provider';
  * import { embed, embedMany, generateText, streamText } from 'ai';
  *
  * const model = llamaCpp({

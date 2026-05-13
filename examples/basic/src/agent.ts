@@ -1,6 +1,6 @@
 import { runAgentTUI } from "@lgrammel/agent-tui";
 import { ToolLoopAgent } from "ai";
-import { gemma4Reasoning, llamaCpp } from "ai-sdk-llama-cpp";
+import { gemma4Reasoning, llamaCpp } from "@lgrammel/llama-cpp-provider";
 import { modelPath } from "./example-model.js";
 import { reportError } from "./report-error.js";
 

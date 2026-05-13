@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { readFile } from "node:fs/promises";
 import { generateText } from "ai";
-import { llamaCpp, LlamaCppLanguageModel } from "ai-sdk-llama-cpp";
+import { llamaCpp, LlamaCppLanguageModel } from "@lgrammel/llama-cpp-provider";
 
 const TEST_MODEL_PATH = process.env.TEST_MODEL_PATH;
 const TEST_MMPROJ_PATH = process.env.TEST_MMPROJ_PATH;

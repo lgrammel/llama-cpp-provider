@@ -1,4 +1,4 @@
-import { gemma4_31b_it } from "ai-sdk-llama-cpp";
+import { gemma4_31b_it } from "@lgrammel/llama-cpp-provider";
 import { homedir } from "node:os";
 import { join } from "node:path";
 

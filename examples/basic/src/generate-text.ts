@@ -1,5 +1,5 @@
 import { generateText } from "ai";
-import { llamaCpp } from "ai-sdk-llama-cpp";
+import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 import {
   exampleContextSize,
   exampleModel,
