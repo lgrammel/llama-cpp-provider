@@ -1,4 +1,5 @@
-import { generateText } from "ai";
+import { runAgentTUI } from "@lgrammel/agent-tui";
+import { ToolLoopAgent } from "ai";
 import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 import {
   exampleContextSize,
@@ -13,16 +14,18 @@ const model = llamaCpp({
   model: exampleModel,
 });
 
-try {
-  const result = await generateText({
-    model,
-    prompt: "Invent a new holiday and describe its traditions.",
-  });
+const agent = new ToolLoopAgent({
+  model,
+  instructions:
+    "You are a concise assistant. Show the final answer clearly after reasoning.",
+});
 
-  console.log(result.text);
-  console.log();
-  console.log("Usage:", result.usage);
-  console.log("Finish reason:", result.finishReason);
+try {
+  await runAgentTUI({
+    name: "Reasoning agent",
+    agent,
+    reasoning: "full",
+  });
 } catch (error) {
   reportError(error, modelPath);
   process.exitCode = 1;

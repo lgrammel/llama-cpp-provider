@@ -44,43 +44,23 @@ function createLlamaCpp(): LlamaCppProvider {
  * @example
  * ```typescript
  * import { llamaCpp } from '@lgrammel/llama-cpp-provider';
- * import { embed, embedMany, generateText, streamText } from 'ai';
+ * import { ToolLoopAgent, tool } from 'ai';
+ * import { z } from 'zod';
  *
  * const model = llamaCpp({
  *   modelPath: './models/llama-3.2-1b.gguf'
  * });
  *
- * const embeddingModel = llamaCpp.embedding({
- *   modelPath: './models/nomic-embed-text-v1.5.Q4_K_M.gguf'
- * });
- *
- * // Non-streaming
- * const { text } = await generateText({
+ * const agent = new ToolLoopAgent({
  *   model,
- *   prompt: 'Hello, how are you?'
- * });
- *
- * // Streaming
- * const { textStream } = await streamText({
- *   model,
- *   prompt: 'Tell me a story'
- * });
- *
- * for await (const chunk of textStream) {
- *   process.stdout.write(chunk);
- * }
- *
- *
- * // Single embedding
- * const { embedding } = await embed({
- *   model: embeddingModel,
- *   value: 'Hello, world!'
- * });
- *
- * // Multiple embeddings
- * const { embeddings } = await embedMany({
- *   model: embeddingModel,
- *   values: ['Hello', 'World', 'How are you?']
+ *   instructions: 'You are a concise assistant.',
+ *   tools: {
+ *     weather: tool({
+ *       description: 'Get the weather in a location',
+ *       inputSchema: z.object({ location: z.string() }),
+ *       execute: async ({ location }) => ({ location, temperature: 72 }),
+ *     }),
+ *   },
  * });
  * ```
  */

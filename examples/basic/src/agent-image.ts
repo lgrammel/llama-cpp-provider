@@ -1,6 +1,6 @@
-import { generateText } from "ai";
-import { readFile } from "node:fs/promises";
+import { ToolLoopAgent } from "ai";
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 import {
   exampleContextSize,
@@ -13,7 +13,7 @@ import { reportError } from "./report-error.js";
 const imagePath = process.argv[2];
 
 if (!imagePath) {
-  throw new Error("Usage: pnpm generate-text-image <path-to-image>");
+  throw new Error("Usage: pnpm agent-image <path-to-image>");
 }
 
 for (const [label, path] of [
@@ -26,10 +26,6 @@ for (const [label, path] of [
   }
 }
 
-console.log("Loading model:", modelPath);
-console.log("Loading mmproj:", mmprojPath);
-console.log("Reading image:", imagePath);
-
 const model = llamaCpp({
   modelPath,
   mmprojPath,
@@ -39,9 +35,15 @@ const model = llamaCpp({
   },
 });
 
+const agent = new ToolLoopAgent({
+  model,
+  instructions:
+    "You are a concise assistant. Describe images accurately when users attach them.",
+  maxOutputTokens: 128,
+});
+
 try {
-  const { text } = await generateText({
-    model,
+  const result = await agent.generate({
     messages: [
       {
         role: "user",
@@ -58,10 +60,9 @@ try {
         ],
       },
     ],
-    maxOutputTokens: 128,
   });
 
-  console.log(text);
+  console.log(result.text);
 } catch (error) {
   reportError(error, modelPath, mmprojPath);
   process.exitCode = 1;

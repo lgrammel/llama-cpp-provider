@@ -4,16 +4,9 @@
   "type": "module",
   "scripts": {
     "agent": "tsx src/agent.ts",
+    "agent-image": "tsx src/agent-image.ts",
+    "agent-reasoning": "tsx src/agent-reasoning.ts",
     "agent-tool-call": "tsx src/agent-tool-call.ts",
-    "generate-text": "tsx src/generate-text.ts",
-    "generate-text-image": "tsx src/generate-text-image.ts",
-    "generate-text-output": "tsx src/generate-text-output.ts",
-    "stream-text": "tsx src/stream-text.ts",
-    "stream-text-reasoning": "tsx src/stream-text-reasoning.ts",
-    "chatbot": "tsx src/chatbot.ts",
-    "embed-many": "tsx src/embed-many.ts",
-    "generate-text-tool-call": "tsx src/generate-text-tool-call.ts",
-    "stream-text-tool-call": "tsx src/stream-text-tool-call.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -6,7 +6,7 @@
 
 A [llama.cpp](https://github.com/ggerganov/llama.cpp) provider for the [Vercel AI SDK](https://sdk.vercel.ai/). It runs local GGUF models inside Node.js through native C++ bindings, without a separate inference server.
 
-The provider implements AI SDK language and embedding model interfaces, including text generation, streaming, structured output, tool calling, image inputs for multimodal models, and embeddings.
+The provider implements AI SDK language and embedding model interfaces for local agents, including tool calling, structured output support, image inputs for multimodal models, reasoning extraction, and embeddings.
 
 ## Requirements
 
@@ -21,30 +21,31 @@ brew install cmake
 ```
 
 ```bash
-npm install @lgrammel/llama-cpp-provider
+npm install ai @lgrammel/agent-tui @lgrammel/llama-cpp-provider
 ```
 
 Installation downloads the pinned llama.cpp revision, builds it with Metal support, and compiles the native Node.js addon.
 
 ## Quick Start
 
-Download a GGUF model locally, then pass its path to `llamaCpp`.
+Download a GGUF model locally, pass its path to `llamaCpp`, and use it with `ToolLoopAgent`. For interactive chat examples, use `@lgrammel/agent-tui`.
 
 ```typescript
-import { generateText } from "ai";
+import { runAgentTUI } from "@lgrammel/agent-tui";
+import { ToolLoopAgent } from "ai";
 import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 
 const model = llamaCpp({
   modelPath: "./models/llama-3.2-1b-instruct.Q4_K_M.gguf",
 });
 
-try {
-  const { text } = await generateText({
-    model,
-    prompt: "Explain quantum computing in simple terms.",
-  });
+const agent = new ToolLoopAgent({
+  model,
+  instructions: "You are a concise local assistant.",
+});
 
-  console.log(text);
+try {
+  await runAgentTUI({ name: "Local assistant", agent });
 } finally {
   await model.dispose();
 }
@@ -54,191 +55,84 @@ Always call `dispose()` when you are done with a model so native CPU/GPU resourc
 
 ## Usage
 
-### Streaming
-
-```typescript
-import { streamText } from "ai";
-import { llamaCpp } from "@lgrammel/llama-cpp-provider";
-
-const model = llamaCpp({ modelPath: "./models/your-model.gguf" });
-
-try {
-  const result = streamText({
-    model,
-    prompt: "Write a haiku about local inference.",
-  });
-
-  for await (const chunk of result.textStream) {
-    process.stdout.write(chunk);
-  }
-} finally {
-  await model.dispose();
-}
-```
-
-### Structured Output
-
-`generateObject` uses llama.cpp grammar constraints to produce JSON that matches the requested schema.
-
-```typescript
-import { generateObject } from "ai";
-import { z } from "zod";
-import { llamaCpp } from "@lgrammel/llama-cpp-provider";
-
-const model = llamaCpp({ modelPath: "./models/your-model.gguf" });
-
-try {
-  const { object } = await generateObject({
-    model,
-    schema: z.object({
-      name: z.string(),
-      steps: z.array(z.string()),
-    }),
-    prompt: "Create a short cookie recipe.",
-  });
-
-  console.log(object);
-} finally {
-  await model.dispose();
-}
-```
-
-Supported schema features include primitives, objects, arrays, enums, constants, `oneOf`, `anyOf`, `allOf`, string constraints, integer ranges, common string formats, and local `$ref` references.
-
 ### Tool Calling
 
-Use AI SDK tools with local models. Tool calling quality depends on the model; function-calling tuned models usually work best.
+Pass AI SDK tools to `ToolLoopAgent`. Tool calling quality depends on the model; function-calling tuned models usually work best.
 
 ```typescript
-import { generateText, stepCountIs, tool } from "ai";
+import { runAgentTUI } from "@lgrammel/agent-tui";
+import { ToolLoopAgent, tool } from "ai";
 import { z } from "zod";
 import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 
 const model = llamaCpp({ modelPath: "./models/your-model.gguf" });
 
-try {
-  const result = await generateText({
-    model,
-    prompt: "What's the weather in Tokyo?",
-    tools: {
-      weather: tool({
-        description: "Get the weather for a location",
-        parameters: z.object({ location: z.string() }),
-        execute: async ({ location }) => ({ location, temperature: 22 }),
-      }),
-    },
-    stopWhen: stepCountIs(3),
-  });
+const agent = new ToolLoopAgent({
+  model,
+  instructions: "Use tools when they help answer the user.",
+  tools: {
+    weather: tool({
+      description: "Get the weather for a location",
+      inputSchema: z.object({ location: z.string() }),
+      execute: async ({ location }) => ({ location, temperature: 22 }),
+    }),
+  },
+});
 
-  console.log(result.text);
+try {
+  await runAgentTUI({ name: "Weather agent", agent });
 } finally {
   await model.dispose();
 }
 ```
 
-### Image Inputs
+### Model Options
 
-Image inputs require a vision-capable GGUF model and its matching multimodal projector (`mmproj`) GGUF file.
+Image inputs require a vision-capable GGUF model and its matching multimodal projector (`mmproj`) GGUF file. Agents that receive image file parts need `mmprojPath` in the model configuration.
 
 ```typescript
-import { readFile } from "node:fs/promises";
-import { generateText } from "ai";
+import { runAgentTUI } from "@lgrammel/agent-tui";
+import { ToolLoopAgent } from "ai";
 import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 
 const model = llamaCpp({
   modelPath: "./models/gemma-4-31b-it.gguf",
   mmprojPath: "./models/mmproj-gemma-4-31b-it.gguf",
-  model: { chatTemplate: "gemma" },
+  contextSize: 4096,
+  gpuLayers: 99,
+  threads: 8,
+  model: {
+    chatTemplate: "gemma",
+    reasoning: {},
+  },
+});
+
+const agent = new ToolLoopAgent({
+  model,
+  instructions: "You are a concise local assistant.",
 });
 
 try {
-  const { text } = await generateText({
-    model,
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "text", text: "Describe this image." },
-          {
-            type: "file",
-            data: { type: "data", data: await readFile("./image.png") },
-            mediaType: "image/png",
-          },
-        ],
-      },
-    ],
-  });
-
-  console.log(text);
+  await runAgentTUI({ name: "Local assistant", agent });
 } finally {
   await model.dispose();
 }
 ```
 
-Inline `Uint8Array`, base64 data, and data URL image parts are supported. Local file paths should be loaded into bytes before calling the model.
+Inline `Uint8Array`, base64 data, and data URL image parts are supported by the provider. Local file paths should be loaded into bytes before calling the model. For reasoning models, set `model.reasoning` to extract thinking into AI SDK reasoning parts; `{}` extracts text between `<think>` and `</think>`.
 
-### Embeddings
-
-```typescript
-import { embed, embedMany } from "ai";
-import { llamaCpp } from "@lgrammel/llama-cpp-provider";
-
-const model = llamaCpp.embedding({
-  modelPath: "./models/nomic-embed-text-v1.5.Q4_K_M.gguf",
-});
-
-try {
-  const { embedding } = await embed({
-    model,
-    value: "Hello, world!",
-  });
-
-  const { embeddings } = await embedMany({
-    model,
-    values: ["Hello", "World"],
-  });
-
-  console.log(embedding, embeddings);
-} finally {
-  model.dispose();
-}
-```
-
-### Reasoning
-
-Set `model.reasoning` to extract thinking into AI SDK reasoning parts. With `{}`, the provider extracts text between `<think>` and `</think>`.
-
-```typescript
-import { generateText } from "ai";
-import { llamaCpp } from "@lgrammel/llama-cpp-provider";
-
-const model = llamaCpp({
-  modelPath: "./models/your-model.gguf",
-  model: { reasoning: {} },
-});
-
-try {
-  const result = await generateText({
-    model,
-    prompt: "Solve 17 * 23 and explain briefly.",
-  });
-
-  console.log(result.reasoningText);
-  console.log(result.text);
-} finally {
-  await model.dispose();
-}
-```
-
-The package also exports model info presets such as `gemma4_31b_it`, `gemma4_26b_a4b`, `qwen3_6_dense`, and `qwen3_6_moe`.
+The package exports model info presets such as `gemma4_31b_it`, `gemma4_26b_a4b`, `qwen3_6_dense`, and `qwen3_6_moe`.
 
 ## API
 
 ### `llamaCpp(config)`
 
-Creates an AI SDK language model for `generateText`, `streamText`, `generateObject`, and tool calling.
+Creates an AI SDK language model for `ToolLoopAgent` and other AI SDK consumers.
 
 ```typescript
+import { ToolLoopAgent } from "ai";
+import { llamaCpp } from "@lgrammel/llama-cpp-provider";
+
 const model = llamaCpp({
   modelPath: "./models/your-model.gguf",
   mmprojPath: "./models/mmproj.gguf",
@@ -251,6 +145,8 @@ const model = llamaCpp({
     reasoning: {},
   },
 });
+
+const agent = new ToolLoopAgent({ model });
 ```
 
 Important options:
@@ -265,7 +161,7 @@ Important options:
 - `model.reasoning` extracts thinking text into AI SDK reasoning parts.
 - `memorySafety` can reject or clamp context sizes that are estimated to exceed available memory when model memory metadata is provided.
 
-Standard AI SDK generation options are supported, including `maxOutputTokens`, `temperature`, `topP`, `topK`, and `stopSequences`.
+Standard AI SDK generation settings are supported by the language model, including `maxOutputTokens`, `temperature`, `topP`, `topK`, and `stopSequences`.
 
 ### `llamaCpp.embedding(config)`
 
