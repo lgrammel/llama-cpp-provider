@@ -1,29 +1,17 @@
 # @lgrammel/llama-cpp-provider
 
-> **Alpha Software**: This package is in early development. APIs may change between versions.
+> **Alpha software**: this package is in early development. APIs may change between versions.
 
-> **macOS Only**: This package currently supports macOS on Apple Silicon and Intel processors.
+> **macOS only**: Apple Silicon and Intel Macs are supported. Windows and Linux are not currently supported.
 
-A [llama.cpp](https://github.com/ggerganov/llama.cpp) provider for the [Vercel AI SDK](https://sdk.vercel.ai/) that implements `LanguageModelV4` and `EmbeddingModelV4`.
+A [llama.cpp](https://github.com/ggerganov/llama.cpp) provider for the [Vercel AI SDK](https://sdk.vercel.ai/). It runs local GGUF models inside Node.js through native C++ bindings, without a separate inference server.
 
-It loads llama.cpp directly into Node.js through native C++ bindings, so local GGUF models can run without a separate inference server.
-
-## Features
-
-- Native llama.cpp inference through `node-addon-api` / N-API.
-- Metal GPU acceleration on macOS.
-- Text generation with `generateText` and `streamText`.
-- Image inputs for multimodal GGUF models with a matching `mmproj` file.
-- Structured JSON output with `generateObject`.
-- AI SDK tool calling with generated grammar constraints.
-- Embeddings with `embed` and `embedMany`.
-- Configurable chat templates and reasoning extraction.
-- ESM-only package with GGUF model support.
+The provider implements AI SDK language and embedding model interfaces, including text generation, streaming, structured output, tool calling, image inputs for multimodal models, and embeddings.
 
 ## Requirements
 
 - macOS on Apple Silicon or Intel.
-- Node.js >= 18.0.0.
+- Node.js >= 18.
 - CMake >= 3.15.
 - Xcode Command Line Tools.
 
@@ -32,24 +20,15 @@ xcode-select --install
 brew install cmake
 ```
 
-Installation on Windows or Linux will fail because this package currently builds only for macOS.
-
-## Installation
-
 ```bash
 npm install @lgrammel/llama-cpp-provider
 ```
 
-During installation, the package:
-
-1. Verifies that it is running on macOS.
-2. Downloads the pinned llama.cpp revision from GitHub.
-3. Compiles llama.cpp as a static library with Metal support.
-4. Builds the native Node.js addon.
+Installation downloads the pinned llama.cpp revision, builds it with Metal support, and compiles the native Node.js addon.
 
 ## Quick Start
 
-Download a GGUF model, then pass its local path to `llamaCpp`.
+Download a GGUF model locally, then pass its path to `llamaCpp`.
 
 ```typescript
 import { generateText } from "ai";
@@ -75,6 +54,88 @@ Always call `dispose()` when you are done with a model so native CPU/GPU resourc
 
 ## Usage
 
+### Streaming
+
+```typescript
+import { streamText } from "ai";
+import { llamaCpp } from "@lgrammel/llama-cpp-provider";
+
+const model = llamaCpp({ modelPath: "./models/your-model.gguf" });
+
+try {
+  const result = streamText({
+    model,
+    prompt: "Write a haiku about local inference.",
+  });
+
+  for await (const chunk of result.textStream) {
+    process.stdout.write(chunk);
+  }
+} finally {
+  await model.dispose();
+}
+```
+
+### Structured Output
+
+`generateObject` uses llama.cpp grammar constraints to produce JSON that matches the requested schema.
+
+```typescript
+import { generateObject } from "ai";
+import { z } from "zod";
+import { llamaCpp } from "@lgrammel/llama-cpp-provider";
+
+const model = llamaCpp({ modelPath: "./models/your-model.gguf" });
+
+try {
+  const { object } = await generateObject({
+    model,
+    schema: z.object({
+      name: z.string(),
+      steps: z.array(z.string()),
+    }),
+    prompt: "Create a short cookie recipe.",
+  });
+
+  console.log(object);
+} finally {
+  await model.dispose();
+}
+```
+
+Supported schema features include primitives, objects, arrays, enums, constants, `oneOf`, `anyOf`, `allOf`, string constraints, integer ranges, common string formats, and local `$ref` references.
+
+### Tool Calling
+
+Use AI SDK tools with local models. Tool calling quality depends on the model; function-calling tuned models usually work best.
+
+```typescript
+import { generateText, stepCountIs, tool } from "ai";
+import { z } from "zod";
+import { llamaCpp } from "@lgrammel/llama-cpp-provider";
+
+const model = llamaCpp({ modelPath: "./models/your-model.gguf" });
+
+try {
+  const result = await generateText({
+    model,
+    prompt: "What's the weather in Tokyo?",
+    tools: {
+      weather: tool({
+        description: "Get the weather for a location",
+        parameters: z.object({ location: z.string() }),
+        execute: async ({ location }) => ({ location, temperature: 22 }),
+      }),
+    },
+    stopWhen: stepCountIs(3),
+  });
+
+  console.log(result.text);
+} finally {
+  await model.dispose();
+}
+```
+
 ### Image Inputs
 
 Image inputs require a vision-capable GGUF model and its matching multimodal projector (`mmproj`) GGUF file.
@@ -85,11 +146,9 @@ import { generateText } from "ai";
 import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 
 const model = llamaCpp({
-  modelPath: "./models/gemma-4-31B-it-Q4_K_M.gguf",
-  mmprojPath: "./models/mmproj-gemma-4-31B-it.gguf",
-  model: {
-    chatTemplate: "gemma",
-  },
+  modelPath: "./models/gemma-4-31b-it.gguf",
+  mmprojPath: "./models/mmproj-gemma-4-31b-it.gguf",
+  model: { chatTemplate: "gemma" },
 });
 
 try {
@@ -102,10 +161,7 @@ try {
           { type: "text", text: "Describe this image." },
           {
             type: "file",
-            data: {
-              type: "data",
-              data: await readFile("./images/example.png"),
-            },
+            data: { type: "data", data: await readFile("./image.png") },
             mediaType: "image/png",
           },
         ],
@@ -120,107 +176,6 @@ try {
 ```
 
 Inline `Uint8Array`, base64 data, and data URL image parts are supported. Local file paths should be loaded into bytes before calling the model.
-
-### Streaming Text
-
-```typescript
-import { streamText } from "ai";
-import { llamaCpp } from "@lgrammel/llama-cpp-provider";
-
-const model = llamaCpp({
-  modelPath: "./models/your-model.gguf",
-});
-
-try {
-  const result = streamText({
-    model,
-    prompt: "Write a haiku about programming.",
-  });
-
-  for await (const chunk of result.textStream) {
-    process.stdout.write(chunk);
-  }
-} finally {
-  await model.dispose();
-}
-```
-
-### Structured Output
-
-Structured output uses GBNF grammar constraints so the model generates JSON that conforms to the provided schema.
-
-```typescript
-import { generateObject } from "ai";
-import { z } from "zod";
-import { llamaCpp } from "@lgrammel/llama-cpp-provider";
-
-const model = llamaCpp({
-  modelPath: "./models/your-model.gguf",
-});
-
-try {
-  const { object: recipe } = await generateObject({
-    model,
-    schema: z.object({
-      name: z.string(),
-      ingredients: z.array(
-        z.object({
-          name: z.string(),
-          amount: z.string(),
-        })
-      ),
-      steps: z.array(z.string()),
-    }),
-    prompt: "Generate a recipe for chocolate chip cookies.",
-  });
-
-  console.log(recipe.name);
-} finally {
-  await model.dispose();
-}
-```
-
-Supported schema features include primitives, objects, arrays, enums, constants, `oneOf`, `anyOf`, `allOf`, string constraints, integer ranges, common string formats, and local `$ref` references.
-
-### Tool Calling
-
-Use AI SDK tools with local models. Tool calling also works with `streamText`; tool call JSON is emitted as `tool-call` events instead of raw text.
-
-```typescript
-import { generateText, stepCountIs, tool } from "ai";
-import { z } from "zod";
-import { llamaCpp } from "@lgrammel/llama-cpp-provider";
-
-const model = llamaCpp({
-  modelPath: "./models/your-model.gguf",
-});
-
-try {
-  const result = await generateText({
-    model,
-    prompt: "What's the weather in Tokyo?",
-    tools: {
-      weather: tool({
-        description: "Get the current weather for a location",
-        parameters: z.object({
-          location: z.string().describe("The location to get weather for"),
-        }),
-        execute: async ({ location }) => ({
-          location,
-          temperature: 72,
-        }),
-      }),
-    },
-    stopWhen: stepCountIs(3),
-  });
-
-  console.log(result.text);
-} finally {
-  await model.dispose();
-}
-```
-
-Tool calling quality depends on the model. Models fine-tuned for function calling, such as Llama 3.1+, Hermes 2/3, Functionary, and Qwen 2.5, usually work best.
 
 ### Embeddings
 
@@ -240,7 +195,7 @@ try {
 
   const { embeddings } = await embedMany({
     model,
-    values: ["Hello, world!", "Goodbye, world!"],
+    values: ["Hello", "World"],
   });
 
   console.log(embedding, embeddings);
@@ -251,7 +206,7 @@ try {
 
 ### Reasoning
 
-Set `model.reasoning` to extract model thinking into AI SDK reasoning parts. With `{}`, the provider extracts text between `<think>` and `</think>`.
+Set `model.reasoning` to extract thinking into AI SDK reasoning parts. With `{}`, the provider extracts text between `<think>` and `</think>`.
 
 ```typescript
 import { generateText } from "ai";
@@ -259,9 +214,7 @@ import { llamaCpp } from "@lgrammel/llama-cpp-provider";
 
 const model = llamaCpp({
   modelPath: "./models/your-model.gguf",
-  model: {
-    reasoning: {},
-  },
+  model: { reasoning: {} },
 });
 
 try {
@@ -277,161 +230,62 @@ try {
 }
 ```
 
-For Gemma 4 thinking support, use the exported model info presets:
+The package also exports model info presets such as `gemma4_31b_it`, `gemma4_26b_a4b`, `qwen3_6_dense`, and `qwen3_6_moe`.
 
-```typescript
-import { gemma4_31b_it, llamaCpp } from "@lgrammel/llama-cpp-provider";
+## API
 
-const model = llamaCpp({
-  modelPath: "./models/gemma-4-31b-it.Q4_K_M.gguf",
-  model: gemma4_31b_it,
-});
-```
+### `llamaCpp(config)`
 
-The package also exports `gemma4_26b_a4b`. For other thinking formats, pass custom delimiters:
+Creates an AI SDK language model for `generateText`, `streamText`, `generateObject`, and tool calling.
 
 ```typescript
 const model = llamaCpp({
   modelPath: "./models/your-model.gguf",
-  model: {
-    reasoning: {
-      openingMarker: "[reasoning]",
-      closingMarker: "[/reasoning]",
-    },
-  },
-});
-```
-
-## Configuration
-
-```typescript
-const model = llamaCpp({
-  // Required: path to the GGUF model file.
-  modelPath: "./models/your-model.gguf",
-
-  // Optional: number of layers to offload to GPU.
-  // Defaults to 99. Set to 0 to disable GPU offload.
-  gpuLayers: 99,
-
-  // Optional: number of CPU threads. Defaults to 4.
-  threads: 8,
-
-  // Optional: maximum context size. Defaults to 2048.
-  // This is highly model and machine memory dependent. High settings can
-  // consume significant memory and may freeze the machine, so monitor system
-  // memory when increasing it.
+  mmprojPath: "./models/mmproj.gguf",
   contextSize: 4096,
-
-  // Optional: enable verbose llama.cpp output. Defaults to false.
-  debug: true,
-
+  gpuLayers: 99,
+  threads: 8,
+  debug: false,
   model: {
-    // Optional: "auto" uses the template embedded in the GGUF file.
-    // You can also pass a built-in template name like "llama3" or "chatml".
     chatTemplate: "auto",
-
-    // Optional: extract thinking into AI SDK reasoning parts.
     reasoning: {},
   },
 });
 ```
 
-Standard AI SDK generation options are supported, including `maxTokens`, `temperature`, `topP`, `topK`, and `stopSequences`.
+Important options:
 
-Available chat templates include `chatml`, `llama2`, `llama2-sys`, `llama3`, `llama4`, `mistral-v1`, `mistral-v3`, `mistral-v7`, `phi3`, `phi4`, `gemma`, `falcon3`, `zephyr`, `deepseek`, `deepseek2`, `deepseek3`, and `command-r`. See the llama.cpp documentation for the full list.
+- `modelPath` is required and must point to a local GGUF model file.
+- `mmprojPath` points to a multimodal projector GGUF file and is required for image inputs.
+- `contextSize` defaults to `2048`. Higher values can use significant memory.
+- `gpuLayers` defaults to `99`, which offloads all available layers to GPU. Use `0` to disable GPU offload.
+- `threads` defaults to `4`.
+- `debug` enables verbose llama.cpp output.
+- `model.chatTemplate` defaults to `"auto"`, which uses the template embedded in the GGUF file. You can also pass a llama.cpp template name such as `"llama3"`, `"chatml"`, or `"gemma"`.
+- `model.reasoning` extracts thinking text into AI SDK reasoning parts.
+- `memorySafety` can reject or clamp context sizes that are estimated to exceed available memory when model memory metadata is provided.
 
-## Model Downloads
-
-You need to download GGUF models separately. Popular sources include:
-
-- [Hugging Face GGUF models](https://huggingface.co/models?search=gguf)
-- [TheBloke's models](https://huggingface.co/TheBloke)
-
-Example:
-
-```bash
-mkdir -p models
-wget -P models/ https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf
-```
-
-## API Reference
-
-### `llamaCpp(config)`
-
-Creates a llama.cpp language model compatible with the Vercel AI SDK.
-
-Parameters:
-
-- `config.modelPath` (string, required): Path to the GGUF model file.
-- `config.gpuLayers` (number, optional): GPU layers to offload. Defaults to `99`.
-- `config.threads` (number, optional): CPU threads. Defaults to `4`.
-- `config.contextSize` (number, optional): Maximum context size. Defaults to `2048`. This is highly model and machine memory dependent. High settings can consume significant memory and may freeze the machine, so monitor system memory when increasing it.
-- `config.debug` (boolean, optional): Enable verbose llama.cpp output. Defaults to `false`.
-- `config.model.chatTemplate` (string, optional): Chat template used to format messages. Defaults to `"auto"`.
-- `config.model.reasoning` (object, optional): Extract thinking into AI SDK reasoning parts.
-
-Returns a `LlamaCppLanguageModel`.
+Standard AI SDK generation options are supported, including `maxOutputTokens`, `temperature`, `topP`, `topK`, and `stopSequences`.
 
 ### `llamaCpp.embedding(config)`
 
-Creates a llama.cpp embedding model compatible with the Vercel AI SDK.
+Creates an AI SDK embedding model for `embed` and `embedMany`. It uses the same base loading options as `llamaCpp(config)`.
 
-Parameters are the same base model loading options as `llamaCpp(config)`.
+## Models
 
-Returns a `LlamaCppEmbeddingModel`.
+GGUF models are downloaded separately. Hugging Face is the most common source:
 
-### Model Lifecycle
+- [GGUF model search](https://huggingface.co/models?search=gguf)
+- [bartowski GGUF models](https://huggingface.co/bartowski)
 
-Both language and embedding models expose `dispose()`. Call it when finished to unload native resources, especially when loading multiple models in one process.
-
-## Development
-
-From the repository root:
-
-```bash
-pnpm install
-pnpm build:ts
-pnpm build:native
-pnpm test:run
-```
-
-The native build is configured by `packages/llama-cpp-provider/CMakeLists.txt` and `packages/llama-cpp-provider/native/CMakeLists.txt`.
-
-### Updating llama.cpp
-
-The llama.cpp source is fetched during package installation from the `llamaCpp` config in `packages/llama-cpp-provider/package.json`.
-
-To update the pinned upstream revision:
-
-1. Choose the upstream commit from [ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp).
-2. Update `llamaCpp.commit` in `packages/llama-cpp-provider/package.json`.
-3. Keep `llamaCpp.repo` unchanged unless intentionally switching forks.
-4. Remove the old checkout and build artifacts:
-
-```bash
-pnpm --filter @lgrammel/llama-cpp-provider clean
-```
-
-5. Fetch the new llama.cpp revision and rebuild the native addon:
-
-```bash
-pnpm install
-```
-
-6. Verify the package:
-
-```bash
-pnpm build:native
-pnpm build:ts
-pnpm test:run
-```
-
-If upstream API changes break the native wrapper, update `packages/llama-cpp-provider/native/llama-wrapper.cpp`, `packages/llama-cpp-provider/native/llama-wrapper.h`, and `packages/llama-cpp-provider/native/binding.cpp`, then rerun `pnpm build:native`.
+Model size, quantization, context size, and multimodal projector compatibility all matter. If a model has an embedded chat template, `chatTemplate: "auto"` is usually the best starting point.
 
 ## Limitations
 
-- macOS only. Windows and Linux are not supported.
-- Text-only models. Image inputs are not supported.
+- macOS only.
+- ESM only.
+- Model and projector paths must point to local GGUF files.
+- Image inputs require a compatible multimodal model and `mmprojPath`.
 
 ## Contributing
 
@@ -440,9 +294,3 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and contribution 
 ## License
 
 MIT
-
-## Acknowledgments
-
-- [llama.cpp](https://github.com/ggerganov/llama.cpp) for the inference engine.
-- [Vercel AI SDK](https://sdk.vercel.ai/) for the provider interface.
-- [node-addon-api](https://github.com/nodejs/node-addon-api) for the N-API C++ wrapper.
