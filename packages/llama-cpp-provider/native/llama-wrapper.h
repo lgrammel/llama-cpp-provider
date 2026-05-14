@@ -2,6 +2,7 @@
 #define LLAMA_WRAPPER_H
 
 #include "prompt-cache.h"
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -67,6 +68,10 @@ struct EmbeddingResult {
   int total_tokens;
 };
 
+struct CancellationToken {
+  std::atomic<bool> cancelled{false};
+};
+
 // Token callback for streaming: returns false to stop generation
 using TokenCallback = std::function<bool(const std::string &token)>;
 
@@ -103,11 +108,12 @@ public:
 
   // Generate text from messages (non-streaming)
   GenerationResult generate(const std::vector<ChatMessage> &messages,
-                            const GenerationParams &params);
+                            const GenerationParams &params, const CancellationToken &cancellation);
 
   // Generate text from messages (streaming)
   GenerationResult generate_streaming(const std::vector<ChatMessage> &messages,
-                                      const GenerationParams &params, TokenCallback callback);
+                                      const GenerationParams &params, TokenCallback callback,
+                                      const CancellationToken &cancellation);
 
   // Generate embeddings for multiple texts
   EmbeddingResult embed(const std::vector<std::string> &texts);
@@ -140,16 +146,20 @@ private:
   bool is_eos_token(int32_t token);
 
   void clear_context_memory(bool data);
+  bool is_cancelled(GenerationResult &result, const CancellationToken &cancellation) const;
   bool trim_cached_tokens(size_t keep_tokens);
   bool decode_tokens(const std::vector<int32_t> &tokens, size_t offset, size_t count, int start_pos,
-                     bool logits_last, GenerationResult &result, const std::string &error_message);
+                     bool logits_last, GenerationResult &result, const std::string &error_message,
+                     const CancellationToken &cancellation);
   bool sync_cached_tokens_to_text(const std::string &text);
-  PromptCacheOps create_prompt_cache_ops(GenerationResult &result);
+  PromptCacheOps create_prompt_cache_ops(GenerationResult &result,
+                                         const CancellationToken &cancellation);
 
   // Prefill the prompt into the context and return the number of consumed positions.
   bool prefill_prompt(const std::string &prompt,
                       const std::vector<std::vector<unsigned char>> &images,
-                      const GenerationParams &params, GenerationResult &result, int &n_past);
+                      const GenerationParams &params, GenerationResult &result, int &n_past,
+                      const CancellationToken &cancellation);
 };
 
 } // namespace llama_wrapper

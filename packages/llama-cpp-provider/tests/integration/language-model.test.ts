@@ -5,6 +5,7 @@ import type { LanguageModelV4Message } from "@ai-sdk/provider";
 vi.mock("../../src/native-binding.js", () => ({
   loadModel: vi.fn().mockResolvedValue(1),
   unloadModel: vi.fn().mockReturnValue(true),
+  cancelGeneration: vi.fn().mockReturnValue(true),
   generate: vi.fn().mockResolvedValue({
     text: "Mock response text",
     promptTokens: 50,
@@ -176,6 +177,54 @@ describe("LlamaCppLanguageModel Integration", () => {
           stopSequences: ["END"],
         })
       );
+    });
+
+    it("rejects and cancels native generation when aborted", async () => {
+      const controller = new AbortController();
+      let markGenerationStarted!: () => void;
+      const generationStarted = new Promise<void>((resolve) => {
+        markGenerationStarted = resolve;
+      });
+      vi.mocked(nativeBinding.generate).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            markGenerationStarted();
+            setTimeout(() => {
+              resolve({
+                text: "Late response",
+                promptTokens: 50,
+                completionTokens: 10,
+                finishReason: "stop",
+              });
+            }, 50);
+          })
+      );
+
+      const promise = model.doGenerate({
+        prompt: testMessages,
+        abortSignal: controller.signal,
+      });
+
+      await generationStarted;
+      controller.abort();
+
+      await expect(promise).rejects.toMatchObject({ name: "AbortError" });
+      expect(nativeBinding.cancelGeneration).toHaveBeenCalledWith(1);
+    });
+
+    it("does not start native generation when already aborted", async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        model.doGenerate({
+          prompt: testMessages,
+          abortSignal: controller.signal,
+        })
+      ).rejects.toMatchObject({ name: "AbortError" });
+
+      expect(nativeBinding.generate).not.toHaveBeenCalled();
+      expect(nativeBinding.cancelGeneration).not.toHaveBeenCalled();
     });
 
     it("enables native prompt cache when configured", async () => {
@@ -582,6 +631,58 @@ describe("LlamaCppLanguageModel Integration", () => {
         expect(delta.id).toBe(expectedId);
       }
       expect(textEnd?.id).toBe(expectedId);
+    });
+
+    it("errors the stream and cancels native generation when aborted", async () => {
+      const controller = new AbortController();
+      vi.mocked(nativeBinding.generateStream).mockImplementationOnce(
+        (_handle, _opts, onToken) =>
+          new Promise((resolve) => {
+            onToken("Hello");
+            setTimeout(() => {
+              resolve({
+                text: "Hello",
+                promptTokens: 30,
+                completionTokens: 1,
+                finishReason: "stop",
+              });
+            }, 50);
+          })
+      );
+
+      const { stream } = await model.doStream({
+        prompt: testMessages,
+        abortSignal: controller.signal,
+      });
+
+      const reader = stream.getReader();
+      expect((await reader.read()).value?.type).toBe("stream-start");
+      expect((await reader.read()).value?.type).toBe("text-start");
+      expect((await reader.read()).value?.type).toBe("text-delta");
+
+      controller.abort();
+
+      await expect(reader.read()).rejects.toMatchObject({
+        name: "AbortError",
+      });
+      expect(nativeBinding.cancelGeneration).toHaveBeenCalledWith(1);
+
+      reader.releaseLock();
+    });
+
+    it("rejects before creating a stream when already aborted", async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        model.doStream({
+          prompt: testMessages,
+          abortSignal: controller.signal,
+        })
+      ).rejects.toMatchObject({ name: "AbortError" });
+
+      expect(nativeBinding.generateStream).not.toHaveBeenCalled();
+      expect(nativeBinding.cancelGeneration).not.toHaveBeenCalled();
     });
 
     it("streams Gemma 4 thinking as reasoning deltas", async () => {

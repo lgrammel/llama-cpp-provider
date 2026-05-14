@@ -18,6 +18,7 @@ import {
   unloadModel,
   generate,
   generateStream,
+  cancelGeneration,
   isModelLoaded,
   type LoadModelOptions,
   type GenerateOptions,
@@ -104,6 +105,18 @@ function isImageMediaType(mediaType?: string): boolean {
 
 function decodeBase64(base64: string): Uint8Array {
   return Uint8Array.from(Buffer.from(base64, "base64"));
+}
+
+function createAbortError(): Error {
+  const error = new Error("The operation was aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
 }
 
 function parseDataUrl(url: string): { data: Uint8Array; mediaType?: string } {
@@ -863,6 +876,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   async doGenerate(
     options: LanguageModelV4CallOptions
   ): Promise<LanguageModelV4GenerateResult> {
+    throwIfAborted(options.abortSignal);
     const handle = await this.ensureModelLoaded();
     // Convert JSON schema to GBNF grammar if structured output is requested
     // Note: Tool calls do NOT use grammar - the model decides whether to call tools
@@ -916,7 +930,11 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       generateOptions.maxTokens
     );
 
-    const result = await generate(handle, generateOptions);
+    const result = await this.runWithAbortSignal(
+      handle,
+      options.abortSignal,
+      () => generate(handle, generateOptions)
+    );
     const parsedContent = reasoningConfig
       ? splitReasoningContent(result.text, reasoningConfig)
       : [{ type: "text" as const, text: result.text }];
@@ -981,6 +999,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   async doStream(
     options: LanguageModelV4CallOptions
   ): Promise<LanguageModelV4StreamResult> {
+    throwIfAborted(options.abortSignal);
     const handle = await this.ensureModelLoaded();
     // Convert JSON schema to GBNF grammar if structured output is requested
     // Note: Tool calls do NOT use grammar - the model decides whether to call tools
@@ -1165,17 +1184,22 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
               )
             : undefined;
 
-          const result = await generateStream(
+          const result = await this.runWithAbortSignal(
             handle,
-            generateOptions,
-            (token) => {
-              fullText += token;
-              if (reasoningProcessor) {
-                reasoningProcessor.push(token);
-              } else {
-                emitTextDelta(token);
-              }
-            }
+            options.abortSignal,
+            () =>
+              generateStream(handle, generateOptions, (token) => {
+                if (options.abortSignal?.aborted) {
+                  return;
+                }
+
+                fullText += token;
+                if (reasoningProcessor) {
+                  reasoningProcessor.push(token);
+                } else {
+                  emitTextDelta(token);
+                }
+              })
           );
 
           reasoningProcessor?.flush();
@@ -1244,6 +1268,51 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
         body: generateOptions,
       },
     };
+  }
+
+  private async runWithAbortSignal<T>(
+    handle: number,
+    signal: AbortSignal | undefined,
+    run: () => Promise<T>
+  ): Promise<T> {
+    throwIfAborted(signal);
+
+    if (!signal) {
+      return run();
+    }
+
+    return new Promise<T>((resolve, reject) => {
+      let settled = false;
+      let abortListener: (() => void) | undefined;
+
+      const settle = (callback: () => void) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (abortListener) {
+          signal.removeEventListener("abort", abortListener);
+        }
+        callback();
+      };
+
+      abortListener = () => {
+        cancelGeneration(handle);
+        settle(() => reject(createAbortError()));
+      };
+
+      signal.addEventListener("abort", abortListener, { once: true });
+
+      if (signal.aborted) {
+        abortListener();
+        return;
+      }
+
+      run().then(
+        (result) => settle(() => resolve(result)),
+        (error: unknown) => settle(() => reject(error))
+      );
+    });
   }
 }
 

@@ -1,14 +1,38 @@
 #include "llama-wrapper.h"
+#include <algorithm>
 #include <atomic>
 #include <memory>
 #include <mutex>
 #include <napi.h>
 #include <unordered_map>
+#include <vector>
+
+class GenerateWorker;
+class StreamGenerateWorker;
 
 // Global state for managing models
 static std::unordered_map<int, std::unique_ptr<llama_wrapper::LlamaModel>> g_models;
 static std::mutex g_models_mutex;
 static std::atomic<int> g_next_handle{1};
+
+static std::unordered_map<int, std::vector<GenerateWorker *>> g_generate_workers;
+static std::unordered_map<int, std::vector<StreamGenerateWorker *>> g_stream_generate_workers;
+static std::mutex g_generation_workers_mutex;
+
+template <typename Worker>
+void RemoveWorker(std::unordered_map<int, std::vector<Worker *>> &workers_by_handle, int handle,
+                  Worker *worker) {
+  auto it = workers_by_handle.find(handle);
+  if (it == workers_by_handle.end()) {
+    return;
+  }
+
+  auto &workers = it->second;
+  workers.erase(std::remove(workers.begin(), workers.end(), worker), workers.end());
+  if (workers.empty()) {
+    workers_by_handle.erase(it);
+  }
+}
 
 // ============================================================================
 // Async Workers
@@ -87,7 +111,10 @@ public:
   GenerateWorker(Napi::Function &callback, int handle,
                  const std::vector<llama_wrapper::ChatMessage> &messages,
                  const llama_wrapper::GenerationParams &params)
-      : Napi::AsyncWorker(callback), handle_(handle), messages_(messages), params_(params) {}
+      : Napi::AsyncWorker(callback), handle_(handle), messages_(messages), params_(params),
+        cancellation_(std::make_shared<llama_wrapper::CancellationToken>()) {}
+
+  void Cancel() { cancellation_->cancelled.store(true); }
 
   void Execute() override {
     llama_wrapper::LlamaModel *model = nullptr;
@@ -102,11 +129,16 @@ public:
       model = it->second.get();
     }
 
-    result_ = model->generate(messages_, params_);
+    result_ = model->generate(messages_, params_, *cancellation_);
   }
 
   void OnOK() override {
     Napi::HandleScope scope(Env());
+
+    {
+      std::lock_guard<std::mutex> lock(g_generation_workers_mutex);
+      RemoveWorker(g_generate_workers, handle_, this);
+    }
 
     Napi::Object result = Napi::Object::New(Env());
     result.Set("text", Napi::String::New(Env(), result_.text));
@@ -122,11 +154,23 @@ public:
     Callback().Call({Env().Null(), result});
   }
 
+  void OnError(const Napi::Error &e) override {
+    Napi::HandleScope scope(Env());
+
+    {
+      std::lock_guard<std::mutex> lock(g_generation_workers_mutex);
+      RemoveWorker(g_generate_workers, handle_, this);
+    }
+
+    Callback().Call({Napi::String::New(Env(), e.Message()), Env().Null()});
+  }
+
 private:
   int handle_;
   std::vector<llama_wrapper::ChatMessage> messages_;
   llama_wrapper::GenerationParams params_;
   llama_wrapper::GenerationResult result_;
+  std::shared_ptr<llama_wrapper::CancellationToken> cancellation_;
 };
 
 class StreamGenerateWorker : public Napi::AsyncWorker {
@@ -135,7 +179,9 @@ public:
                        const std::vector<llama_wrapper::ChatMessage> &messages,
                        const llama_wrapper::GenerationParams &params, Napi::ThreadSafeFunction tsfn)
       : Napi::AsyncWorker(callback), handle_(handle), messages_(messages), params_(params),
-        tsfn_(tsfn) {}
+        tsfn_(tsfn), cancellation_(std::make_shared<llama_wrapper::CancellationToken>()) {}
+
+  void Cancel() { cancellation_->cancelled.store(true); }
 
   void Execute() override {
     llama_wrapper::LlamaModel *model = nullptr;
@@ -151,23 +197,35 @@ public:
     }
 
     // Stream tokens during generation using thread-safe function
-    result_ = model->generate_streaming(messages_, params_, [this](const std::string &token) {
-      // Create a copy on the heap that will be deleted after the callback
-      std::string *tokenCopy = new std::string(token);
-      // Call JavaScript callback from worker thread via thread-safe function
-      napi_status status = tsfn_.BlockingCall(
-          tokenCopy, [](Napi::Env env, Napi::Function jsCallback, std::string *data) {
-            if (data != nullptr) {
-              jsCallback.Call({Napi::String::New(env, *data)});
-              delete data;
-            }
-          });
-      return status == napi_ok;
-    });
+    result_ = model->generate_streaming(
+        messages_, params_,
+        [this](const std::string &token) {
+          if (cancellation_->cancelled.load()) {
+            return false;
+          }
+
+          // Create a copy on the heap that will be deleted after the callback
+          std::string *tokenCopy = new std::string(token);
+          // Call JavaScript callback from worker thread via thread-safe function
+          napi_status status = tsfn_.BlockingCall(
+              tokenCopy, [](Napi::Env env, Napi::Function jsCallback, std::string *data) {
+                if (data != nullptr) {
+                  jsCallback.Call({Napi::String::New(env, *data)});
+                  delete data;
+                }
+              });
+          return status == napi_ok && !cancellation_->cancelled.load();
+        },
+        *cancellation_);
   }
 
   void OnOK() override {
     Napi::HandleScope scope(Env());
+
+    {
+      std::lock_guard<std::mutex> lock(g_generation_workers_mutex);
+      RemoveWorker(g_stream_generate_workers, handle_, this);
+    }
 
     // Release the thread-safe function
     tsfn_.Release();
@@ -190,6 +248,11 @@ public:
   void OnError(const Napi::Error &e) override {
     Napi::HandleScope scope(Env());
 
+    {
+      std::lock_guard<std::mutex> lock(g_generation_workers_mutex);
+      RemoveWorker(g_stream_generate_workers, handle_, this);
+    }
+
     // Release the thread-safe function
     tsfn_.Release();
 
@@ -203,6 +266,7 @@ private:
   llama_wrapper::GenerationParams params_;
   llama_wrapper::GenerationResult result_;
   Napi::ThreadSafeFunction tsfn_;
+  std::shared_ptr<llama_wrapper::CancellationToken> cancellation_;
 };
 
 class EmbedWorker : public Napi::AsyncWorker {
@@ -308,6 +372,23 @@ Napi::Value UnloadModel(const Napi::CallbackInfo &info) {
   int handle = info[0].As<Napi::Number>().Int32Value();
 
   {
+    std::lock_guard<std::mutex> generation_lock(g_generation_workers_mutex);
+    auto generate_it = g_generate_workers.find(handle);
+    if (generate_it != g_generate_workers.end()) {
+      for (GenerateWorker *worker : generate_it->second) {
+        worker->Cancel();
+      }
+    }
+
+    auto stream_it = g_stream_generate_workers.find(handle);
+    if (stream_it != g_stream_generate_workers.end()) {
+      for (StreamGenerateWorker *worker : stream_it->second) {
+        worker->Cancel();
+      }
+    }
+  }
+
+  {
     std::lock_guard<std::mutex> lock(g_models_mutex);
     auto it = g_models.find(handle);
     if (it != g_models.end()) {
@@ -316,6 +397,40 @@ Napi::Value UnloadModel(const Napi::CallbackInfo &info) {
   }
 
   return Napi::Boolean::New(env, true);
+}
+
+Napi::Value CancelGeneration(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() < 1 || !info[0].IsNumber()) {
+    Napi::TypeError::New(env, "Expected model handle").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  int handle = info[0].As<Napi::Number>().Int32Value();
+
+  bool cancelled = false;
+
+  {
+    std::lock_guard<std::mutex> lock(g_generation_workers_mutex);
+    auto generate_it = g_generate_workers.find(handle);
+    if (generate_it != g_generate_workers.end()) {
+      for (GenerateWorker *worker : generate_it->second) {
+        worker->Cancel();
+        cancelled = true;
+      }
+    }
+
+    auto stream_it = g_stream_generate_workers.find(handle);
+    if (stream_it != g_stream_generate_workers.end()) {
+      for (StreamGenerateWorker *worker : stream_it->second) {
+        worker->Cancel();
+        cancelled = true;
+      }
+    }
+  }
+
+  return Napi::Boolean::New(env, cancelled);
 }
 
 // Helper function to parse messages array from JavaScript
@@ -386,6 +501,10 @@ Napi::Value Generate(const Napi::CallbackInfo &info) {
       options.Has("promptCache") ? options.Get("promptCache").As<Napi::Boolean>().Value() : false;
 
   auto worker = new GenerateWorker(callback, handle, messages, params);
+  {
+    std::lock_guard<std::mutex> lock(g_generation_workers_mutex);
+    g_generate_workers[handle].push_back(worker);
+  }
   worker->Queue();
 
   return env.Undefined();
@@ -444,6 +563,10 @@ Napi::Value GenerateStream(const Napi::CallbackInfo &info) {
       );
 
   auto worker = new StreamGenerateWorker(done_callback, handle, messages, params, tsfn);
+  {
+    std::lock_guard<std::mutex> lock(g_generation_workers_mutex);
+    g_stream_generate_workers[handle].push_back(worker);
+  }
   worker->Queue();
 
   return env.Undefined();
@@ -505,6 +628,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("unloadModel", Napi::Function::New(env, UnloadModel));
   exports.Set("generate", Napi::Function::New(env, Generate));
   exports.Set("generateStream", Napi::Function::New(env, GenerateStream));
+  exports.Set("cancelGeneration", Napi::Function::New(env, CancelGeneration));
   exports.Set("isModelLoaded", Napi::Function::New(env, IsModelLoaded));
   exports.Set("embed", Napi::Function::New(env, Embed));
   return exports;

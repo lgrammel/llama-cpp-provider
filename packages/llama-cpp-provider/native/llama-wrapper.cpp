@@ -371,6 +371,17 @@ void LlamaModel::clear_context_memory(bool data) {
   }
 }
 
+bool LlamaModel::is_cancelled(GenerationResult &result,
+                              const CancellationToken &cancellation) const {
+  if (!cancellation.cancelled.load()) {
+    return false;
+  }
+
+  result.finish_reason = "error";
+  result.error_message = "Generation aborted";
+  return true;
+}
+
 bool LlamaModel::trim_cached_tokens(size_t keep_tokens) {
   if (keep_tokens >= cached_tokens_.size()) {
     return true;
@@ -395,10 +406,15 @@ bool LlamaModel::trim_cached_tokens(size_t keep_tokens) {
 
 bool LlamaModel::decode_tokens(const std::vector<int32_t> &tokens, size_t offset, size_t count,
                                int start_pos, bool logits_last, GenerationResult &result,
-                               const std::string &error_message) {
+                               const std::string &error_message,
+                               const CancellationToken &cancellation) {
   size_t n_processed = 0;
 
   while (n_processed < count) {
+    if (is_cancelled(result, cancellation)) {
+      return false;
+    }
+
     const size_t n_chunk = std::min(static_cast<size_t>(n_batch_), count - n_processed);
     llama_batch batch = llama_batch_init(static_cast<int32_t>(n_chunk), 0, 1);
 
@@ -414,7 +430,9 @@ bool LlamaModel::decode_tokens(const std::vector<int32_t> &tokens, size_t offset
 
     if (llama_decode(ctx_, batch) != 0) {
       llama_batch_free(batch);
-      result.error_message = error_message;
+      if (!is_cancelled(result, cancellation)) {
+        result.error_message = error_message;
+      }
       return false;
     }
 
@@ -427,17 +445,21 @@ bool LlamaModel::decode_tokens(const std::vector<int32_t> &tokens, size_t offset
 
 bool LlamaModel::sync_cached_tokens_to_text(const std::string &text) {
   GenerationResult sync_result;
-  return sync_prompt_cache_to_text(cached_tokens_, text, create_prompt_cache_ops(sync_result));
+  CancellationToken cancellation;
+  return sync_prompt_cache_to_text(cached_tokens_, text,
+                                   create_prompt_cache_ops(sync_result, cancellation));
 }
 
-PromptCacheOps LlamaModel::create_prompt_cache_ops(GenerationResult &result) {
+PromptCacheOps LlamaModel::create_prompt_cache_ops(GenerationResult &result,
+                                                   const CancellationToken &cancellation) {
   return {
       [this](const std::string &text) { return tokenize(text, true); },
       [this](size_t keep_tokens) { return trim_cached_tokens(keep_tokens); },
       [this]() { clear_context_memory(true); },
-      [this, &result](const TokenList &tokens, size_t offset, size_t count, int start_pos) {
+      [this, &result, &cancellation](const TokenList &tokens, size_t offset, size_t count,
+                                     int start_pos) {
         return decode_tokens(tokens, offset, count, start_pos, true, result,
-                             "Failed to decode cached tokens");
+                             "Failed to decode cached tokens", cancellation);
       },
   };
 }
@@ -445,8 +467,12 @@ PromptCacheOps LlamaModel::create_prompt_cache_ops(GenerationResult &result) {
 bool LlamaModel::prefill_prompt(const std::string &prompt,
                                 const std::vector<std::vector<unsigned char>> &images,
                                 const GenerationParams &params, GenerationResult &result,
-                                int &n_past) {
+                                int &n_past, const CancellationToken &cancellation) {
   n_past = 0;
+
+  if (is_cancelled(result, cancellation)) {
+    return false;
+  }
 
   if (images.empty()) {
     // Tokenize the prompt
@@ -459,8 +485,9 @@ bool LlamaModel::prefill_prompt(const std::string &prompt,
       return false;
     }
 
-    const PromptCachePrefillResult cache_result = prefill_prompt_cache(
-        cached_tokens_, prompt_tokens, params.prompt_cache, create_prompt_cache_ops(result));
+    const PromptCachePrefillResult cache_result =
+        prefill_prompt_cache(cached_tokens_, prompt_tokens, params.prompt_cache,
+                             create_prompt_cache_ops(result, cancellation));
     if (!cache_result.ok) {
       return false;
     }
@@ -524,6 +551,10 @@ bool LlamaModel::prefill_prompt(const std::string &prompt,
     mtmd_bitmap_free(bitmap);
   }
 
+  if (is_cancelled(result, cancellation)) {
+    return false;
+  }
+
   if (eval_result != 0) {
     result.error_message = "Failed to decode multimodal prompt";
     return false;
@@ -540,7 +571,8 @@ bool LlamaModel::prefill_prompt(const std::string &prompt,
 }
 
 GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
-                                      const GenerationParams &params) {
+                                      const GenerationParams &params,
+                                      const CancellationToken &cancellation) {
   std::lock_guard<std::mutex> lock(inference_mutex_);
   GenerationResult result;
   result.finish_reason = "error";
@@ -548,6 +580,10 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
   result.completion_tokens = 0;
   result.cache_read_tokens = 0;
   result.cache_write_tokens = 0;
+
+  if (is_cancelled(result, cancellation)) {
+    return result;
+  }
 
   if (!ctx_ || !model_) {
     result.error_message = "Model context is not initialized";
@@ -572,7 +608,7 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
   create_sampler(params);
 
   int n_past = 0;
-  if (!prefill_prompt(prompt, images, params, result, n_past)) {
+  if (!prefill_prompt(prompt, images, params, result, n_past, cancellation)) {
     return result;
   }
 
@@ -581,6 +617,10 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
   int n_cur = n_past;
 
   for (int i = 0; i < params.max_tokens; i++) {
+    if (is_cancelled(result, cancellation)) {
+      break;
+    }
+
     // Sample the next token
     int32_t new_token = llama_sampler_sample(sampler_, ctx_, -1);
 
@@ -613,8 +653,11 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
 
     std::vector<int32_t> token = {new_token};
     cached_tokens_.push_back(new_token);
-    if (!decode_tokens(token, 0, 1, n_cur, true, result, "Failed to decode generated token")) {
-      result.error_message = "Failed to decode generated token";
+    if (!decode_tokens(token, 0, 1, n_cur, true, result, "Failed to decode generated token",
+                       cancellation)) {
+      if (result.error_message != "Generation aborted") {
+        result.error_message = "Failed to decode generated token";
+      }
       cached_tokens_.pop_back();
       break;
     }
@@ -627,7 +670,9 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
     sync_cached_tokens_to_text(prompt + generated_text);
   }
 
-  if (result.finish_reason == "error" && result.completion_tokens >= params.max_tokens) {
+  if (result.error_message == "Generation aborted") {
+    cached_tokens_.clear();
+  } else if (result.finish_reason == "error" && result.completion_tokens >= params.max_tokens) {
     result.finish_reason = "length";
   } else if (result.finish_reason == "error" && result.error_message.empty()) {
     result.finish_reason = "stop";
@@ -639,7 +684,8 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
 
 GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &messages,
                                                 const GenerationParams &params,
-                                                TokenCallback callback) {
+                                                TokenCallback callback,
+                                                const CancellationToken &cancellation) {
   std::lock_guard<std::mutex> lock(inference_mutex_);
   GenerationResult result;
   result.finish_reason = "error";
@@ -647,6 +693,10 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
   result.completion_tokens = 0;
   result.cache_read_tokens = 0;
   result.cache_write_tokens = 0;
+
+  if (is_cancelled(result, cancellation)) {
+    return result;
+  }
 
   if (!ctx_ || !model_) {
     result.error_message = "Model context is not initialized";
@@ -671,7 +721,7 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
   create_sampler(params);
 
   int n_past = 0;
-  if (!prefill_prompt(prompt, images, params, result, n_past)) {
+  if (!prefill_prompt(prompt, images, params, result, n_past, cancellation)) {
     return result;
   }
 
@@ -680,6 +730,10 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
   int n_cur = n_past;
 
   for (int i = 0; i < params.max_tokens; i++) {
+    if (is_cancelled(result, cancellation)) {
+      break;
+    }
+
     // Sample the next token
     int32_t new_token = llama_sampler_sample(sampler_, ctx_, -1);
 
@@ -696,7 +750,9 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
 
     // Call the callback with the new token
     if (!callback(token_str)) {
-      result.finish_reason = "stop";
+      if (!is_cancelled(result, cancellation)) {
+        result.finish_reason = "stop";
+      }
       break;
     }
 
@@ -716,8 +772,11 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
 
     std::vector<int32_t> token = {new_token};
     cached_tokens_.push_back(new_token);
-    if (!decode_tokens(token, 0, 1, n_cur, true, result, "Failed to decode generated token")) {
-      result.error_message = "Failed to decode generated token";
+    if (!decode_tokens(token, 0, 1, n_cur, true, result, "Failed to decode generated token",
+                       cancellation)) {
+      if (result.error_message != "Generation aborted") {
+        result.error_message = "Failed to decode generated token";
+      }
       cached_tokens_.pop_back();
       break;
     }
@@ -730,7 +789,9 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
     sync_cached_tokens_to_text(prompt + generated_text);
   }
 
-  if (result.finish_reason == "error" && result.completion_tokens >= params.max_tokens) {
+  if (result.error_message == "Generation aborted") {
+    cached_tokens_.clear();
+  } else if (result.finish_reason == "error" && result.completion_tokens >= params.max_tokens) {
     result.finish_reason = "length";
   } else if (result.finish_reason == "error" && result.error_message.empty()) {
     result.finish_reason = "stop";

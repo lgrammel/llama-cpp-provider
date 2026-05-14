@@ -92,6 +92,7 @@ interface NativeBinding {
     tokenCallback: (token: string) => void,
     doneCallback: (error: string | null, result: GenerateResult | null) => void
   ): void;
+  cancelGeneration(handle: number): boolean;
   isModelLoaded(handle: number): boolean;
   // Embedding functions
   embed(
@@ -219,6 +220,10 @@ export function generate(
       }
     });
   });
+}
+
+export function cancelGeneration(handle: number): boolean {
+  return binding.cancelGeneration(handle);
 }
 
 export function generateStream(
