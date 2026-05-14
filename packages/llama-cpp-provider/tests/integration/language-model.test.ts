@@ -1003,6 +1003,80 @@ describe("LlamaCppLanguageModel Integration", () => {
       expect(result.content).toHaveLength(1);
       expect(result.content[0].type).toBe("text");
     });
+
+    it("preserves generated tool-call JSON in later cached prompts", async () => {
+      const cachedModel = new LlamaCppLanguageModel({
+        modelPath: "/test/model.gguf",
+        cache: { mode: "prefix" },
+      });
+      const rawToolCall =
+        '{"name": "get_weather", "arguments": {"location": "Tokyo"}}';
+
+      vi.mocked(nativeBinding.generate)
+        .mockResolvedValueOnce({
+          text: rawToolCall,
+          promptTokens: 100,
+          completionTokens: 20,
+          finishReason: "stop",
+        })
+        .mockResolvedValueOnce({
+          text: "It is 72 degrees in Tokyo.",
+          promptTokens: 130,
+          completionTokens: 8,
+          cacheReadTokens: 120,
+          cacheWriteTokens: 10,
+          finishReason: "stop",
+        });
+
+      const first = await cachedModel.doGenerate({
+        prompt: testMessages,
+        tools: testTools,
+      });
+      const toolCall = first.content.find((part) => part.type === "tool-call");
+
+      expect(toolCall).toBeDefined();
+
+      await cachedModel.doGenerate({
+        prompt: [
+          ...testMessages,
+          {
+            role: "assistant",
+            content: [toolCall!],
+          },
+          {
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: toolCall!.toolCallId,
+                toolName: toolCall!.toolName,
+                output: {
+                  type: "json",
+                  value: { location: "Tokyo", temperature: 72 },
+                },
+              },
+            ],
+          },
+        ],
+        tools: testTools,
+      });
+
+      expect(nativeBinding.generate).toHaveBeenNthCalledWith(
+        2,
+        expect.any(Number),
+        expect.objectContaining({
+          promptCache: true,
+          messages: expect.arrayContaining([
+            {
+              role: "assistant",
+              content: rawToolCall,
+            },
+          ]),
+        })
+      );
+
+      await cachedModel.dispose();
+    });
   });
 
   describe("doStream with tools", () => {
@@ -1192,6 +1266,85 @@ describe("LlamaCppLanguageModel Integration", () => {
       const toolCallPart = parts.find((p) => p.type === "tool-call");
       expect(toolCallPart).toBeDefined();
       expect(toolCallPart?.toolName).toBe("weather");
+    });
+
+    it("preserves streamed tool-call JSON in later cached prompts", async () => {
+      const cachedModel = new LlamaCppLanguageModel({
+        modelPath: "/test/model.gguf",
+        cache: { mode: "prefix" },
+      });
+      const rawToolCall =
+        '{"name": "weather", "arguments": {"location": "Tokyo"}}';
+
+      vi.mocked(nativeBinding.generateStream).mockImplementationOnce(
+        (handle, opts, onToken) => {
+          onToken(rawToolCall);
+          return Promise.resolve({
+            text: rawToolCall,
+            promptTokens: 50,
+            completionTokens: 15,
+            finishReason: "stop",
+          });
+        }
+      );
+
+      const first = await cachedModel.doStream({
+        prompt: testMessages,
+        tools: testTools,
+      });
+      const firstParts = await collectStreamParts(first.stream);
+      const toolCall = firstParts.find((part) => part.type === "tool-call");
+
+      expect(toolCall).toBeDefined();
+
+      vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
+        text: "It is sunny in Tokyo.",
+        promptTokens: 80,
+        completionTokens: 6,
+        cacheReadTokens: 70,
+        cacheWriteTokens: 10,
+        finishReason: "stop",
+      });
+
+      await cachedModel.doGenerate({
+        prompt: [
+          ...testMessages,
+          {
+            role: "assistant",
+            content: [toolCall],
+          },
+          {
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: toolCall.toolCallId,
+                toolName: toolCall.toolName,
+                output: {
+                  type: "json",
+                  value: { location: "Tokyo", condition: "sunny" },
+                },
+              },
+            ],
+          },
+        ],
+        tools: testTools,
+      });
+
+      expect(nativeBinding.generate).toHaveBeenLastCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          promptCache: true,
+          messages: expect.arrayContaining([
+            {
+              role: "assistant",
+              content: rawToolCall,
+            },
+          ]),
+        })
+      );
+
+      await cachedModel.dispose();
     });
   });
 });

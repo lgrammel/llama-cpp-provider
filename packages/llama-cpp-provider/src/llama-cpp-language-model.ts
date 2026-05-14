@@ -581,6 +581,10 @@ function generateToolCallId(): string {
   return `call_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
 }
 
+function toolCallCacheKey(toolCallIds: string[]): string {
+  return toolCallIds.join("\n");
+}
+
 /**
  * Build a system prompt that instructs the model to use tools.
  */
@@ -618,7 +622,8 @@ Rules:
 export function convertMessages(
   messages: LanguageModelV4Message[],
   tools?: LanguageModelV4FunctionTool[],
-  reasoning?: Pick<ResolvedReasoningConfig, "promptPrefix">
+  reasoning?: Pick<ResolvedReasoningConfig, "promptPrefix">,
+  toolCallContentCache?: ReadonlyMap<string, string>
 ): ChatMessage[] {
   const result: ChatMessage[] = [];
   let reasoningPromptAdded = false;
@@ -704,14 +709,19 @@ export function convertMessages(
 
         // If there are tool calls, format them as JSON
         if (toolCallParts.length > 0) {
-          const toolCallsJson = JSON.stringify({
-            tool_calls: toolCallParts.map((tc) => ({
-              id: tc.toolCallId,
-              name: tc.toolName,
-              arguments: tc.input,
-            })),
-          });
-          assistantContent = toolCallsJson;
+          const cachedToolCallContent = toolCallContentCache?.get(
+            toolCallCacheKey(toolCallParts.map((tc) => tc.toolCallId))
+          );
+
+          assistantContent =
+            cachedToolCallContent ??
+            JSON.stringify({
+              tool_calls: toolCallParts.map((tc) => ({
+                id: tc.toolCallId,
+                name: tc.toolName,
+                arguments: tc.input,
+              })),
+            });
         }
 
         if (assistantContent) {
@@ -787,6 +797,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   private readonly config: LlamaCppModelConfig;
   private initPromise: Promise<void> | null = null;
   private loadedContextSize: number | null = null;
+  private readonly toolCallContentCache = new Map<string, string>();
 
   constructor(config: LlamaCppModelConfig) {
     this.config = config;
@@ -884,7 +895,8 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       hasTools && options.toolChoice?.type !== "none"
         ? functionTools
         : undefined,
-      reasoningConfig
+      reasoningConfig,
+      this.toolCallContentCache
     );
 
     const generateOptions: GenerateOptions = {
@@ -922,14 +934,21 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
         appendParsedContent(content, parsedContent, { includeText: false });
 
         // Add tool calls to content
+        const toolCallIds: string[] = [];
         for (const toolCall of toolCalls) {
+          const toolCallId = toolCall.id || generateToolCallId();
+          toolCallIds.push(toolCallId);
           content.push({
             type: "tool-call",
-            toolCallId: toolCall.id || generateToolCallId(),
+            toolCallId,
             toolName: toolCall.name,
             input: JSON.stringify(toolCall.arguments),
           });
         }
+        this.toolCallContentCache.set(
+          toolCallCacheKey(toolCallIds),
+          visibleText
+        );
 
         // Set finish reason to tool-calls
         finishReason = {
@@ -994,7 +1013,8 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       hasTools && options.toolChoice?.type !== "none"
         ? functionTools
         : undefined,
-      reasoningConfig
+      reasoningConfig,
+      this.toolCallContentCache
     );
 
     const generateOptions: GenerateOptions = {
@@ -1176,8 +1196,10 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
 
             if (toolCalls && toolCalls.length > 0) {
               // Emit tool call events
+              const toolCallIds: string[] = [];
               for (const toolCall of toolCalls) {
                 const toolCallId = toolCall.id || generateToolCallId();
+                toolCallIds.push(toolCallId);
 
                 controller.enqueue({
                   type: "tool-call",
@@ -1186,6 +1208,10 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
                   input: JSON.stringify(toolCall.arguments),
                 });
               }
+              this.toolCallContentCache.set(
+                toolCallCacheKey(toolCallIds),
+                visibleText
+              );
 
               // Set finish reason to tool-calls
               finishReason = {
