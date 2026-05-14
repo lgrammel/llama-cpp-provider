@@ -1,5 +1,11 @@
 # @lgrammel/llama-cpp-provider
 
+## 0.2.1
+
+### Patch Changes
+
+- 0037e59: Preserve the exact generated tool-call JSON when reusing cached prompts so follow-up tool-result turns can benefit from prefix cache hits.
+
 ## 0.2.0
 
 ### Minor Changes
