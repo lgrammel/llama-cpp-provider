@@ -1,5 +1,12 @@
 # @lgrammel/llama-cpp-provider
 
+## 0.2.3
+
+### Patch Changes
+
+- 20bb81d: Expose the configured context size on language model instances.
+- 2a0f757: Add AbortSignal support for cancelling in-flight generation and streaming calls.
+
 ## 0.2.2
 
 ### Patch Changes
