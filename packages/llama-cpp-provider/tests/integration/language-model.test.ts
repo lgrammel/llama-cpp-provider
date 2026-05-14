@@ -774,6 +774,7 @@ describe("LlamaCppLanguageModel Integration", () => {
         gpuLayers: 32,
         threads: 8,
         debug: true,
+        logPrompts: true,
         chatTemplate: "llama3",
         mmprojPath: "/custom/mmproj.gguf",
         memorySafety: { mode: "off" },
@@ -789,6 +790,7 @@ describe("LlamaCppLanguageModel Integration", () => {
         gpuLayers: 32,
         threads: 8,
         debug: true,
+        logPrompts: true,
         chatTemplate: "llama3",
         mmprojPath: "/custom/mmproj.gguf",
       });
@@ -881,6 +883,7 @@ describe("LlamaCppLanguageModel Integration", () => {
         gpuLayers: 99,
         threads: 4,
         debug: false,
+        logPrompts: false,
         chatTemplate: "auto",
       });
 

@@ -75,6 +75,7 @@ describe("llamaCpp", () => {
         gpuLayers: undefined,
         threads: undefined,
         debug: undefined,
+        logPrompts: undefined,
         chatTemplate: "gemma",
         reasoning: gemma4_31b_it.reasoning,
       });

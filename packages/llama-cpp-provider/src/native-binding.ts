@@ -19,6 +19,12 @@ export interface LoadModelOptions {
   threads?: number;
   debug?: boolean;
   /**
+   * Print the final chat-template-rendered prompt sent to llama.cpp to stderr.
+   *
+   * This may include private user data. Intended for local debugging only.
+   */
+  logPrompts?: boolean;
+  /**
    * Chat template to use for formatting messages.
    * - "auto" (default): Use the template embedded in the GGUF model file
    * - Template name: Use a specific built-in template (e.g., "llama3", "chatml", "gemma")
@@ -147,6 +153,9 @@ function omitUndefinedLoadModelOptions(
   }
   if (options.debug !== undefined) {
     nativeOptions.debug = options.debug;
+  }
+  if (options.logPrompts !== undefined) {
+    nativeOptions.logPrompts = options.logPrompts;
   }
   if (options.chatTemplate !== undefined) {
     nativeOptions.chatTemplate = options.chatTemplate;

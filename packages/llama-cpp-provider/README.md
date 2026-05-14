@@ -70,6 +70,7 @@ const model = llamaCpp({
   gpuLayers: 99,
   threads: 8,
   debug: false,
+  logPrompts: false,
   model: {
     chatTemplate: "auto",
     reasoning: {},
@@ -87,6 +88,7 @@ Important options:
 - `gpuLayers` defaults to `99`, which offloads all available layers to GPU. Use `0` to disable GPU offload.
 - `threads` defaults to `4`.
 - `debug` enables verbose llama.cpp output.
+- `logPrompts` prints the final chat-template-rendered prompt sent to llama.cpp to stderr. It can include private user data and is intended for local debugging only.
 - `model.chatTemplate` defaults to `"auto"`, which uses the template embedded in the GGUF file. You can also pass a llama.cpp template name such as `"llama3"`, `"chatml"`, or `"gemma"`.
 - `model.reasoning` extracts thinking text into AI SDK reasoning parts.
 - `memorySafety` can reject or clamp context sizes that are estimated to exceed available memory when model memory metadata is provided.

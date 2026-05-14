@@ -42,10 +42,11 @@ class LoadModelWorker : public Napi::AsyncWorker {
 public:
   LoadModelWorker(Napi::Function &callback, const std::string &model_path,
                   const std::string &mmproj_path, int n_gpu_layers, int n_ctx, int n_threads,
-                  bool debug, const std::string &chat_template, bool embedding)
+                  bool debug, bool log_prompts, const std::string &chat_template, bool embedding)
       : Napi::AsyncWorker(callback), model_path_(model_path), mmproj_path_(mmproj_path),
         n_gpu_layers_(n_gpu_layers), n_ctx_(n_ctx), n_threads_(n_threads), debug_(debug),
-        chat_template_(chat_template), embedding_(embedding), handle_(-1), success_(false) {}
+        log_prompts_(log_prompts), chat_template_(chat_template), embedding_(embedding),
+        handle_(-1), success_(false) {}
 
   void Execute() override {
     auto model = std::make_unique<llama_wrapper::LlamaModel>();
@@ -56,6 +57,7 @@ public:
     model_params.n_gpu_layers = n_gpu_layers_;
     model_params.n_threads = n_threads_;
     model_params.debug = debug_;
+    model_params.log_prompts = log_prompts_;
     model_params.chat_template = chat_template_;
 
     if (!model->load(model_params)) {
@@ -100,6 +102,7 @@ private:
   int n_ctx_;
   int n_threads_;
   bool debug_;
+  bool log_prompts_;
   std::string chat_template_;
   bool embedding_;
   int handle_;
@@ -348,6 +351,8 @@ Napi::Value LoadModel(const Napi::CallbackInfo &info) {
   int n_threads =
       options.Has("threads") ? options.Get("threads").As<Napi::Number>().Int32Value() : 4;
   bool debug = options.Has("debug") ? options.Get("debug").As<Napi::Boolean>().Value() : false;
+  bool log_prompts =
+      options.Has("logPrompts") ? options.Get("logPrompts").As<Napi::Boolean>().Value() : false;
   std::string chat_template = options.Has("chatTemplate")
                                   ? options.Get("chatTemplate").As<Napi::String>().Utf8Value()
                                   : "auto";
@@ -355,7 +360,7 @@ Napi::Value LoadModel(const Napi::CallbackInfo &info) {
       options.Has("embedding") ? options.Get("embedding").As<Napi::Boolean>().Value() : false;
 
   auto worker = new LoadModelWorker(callback, model_path, mmproj_path, n_gpu_layers, n_ctx,
-                                    n_threads, debug, chat_template, embedding);
+                                    n_threads, debug, log_prompts, chat_template, embedding);
   worker->Queue();
 
   return env.Undefined();

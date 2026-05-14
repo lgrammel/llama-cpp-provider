@@ -24,7 +24,8 @@ struct ModelParams {
   int n_threads = 4;
   bool use_mmap = true;
   bool use_mlock = false;
-  bool debug = false; // Show verbose llama.cpp output
+  bool debug = false;       // Show verbose llama.cpp output
+  bool log_prompts = false; // Print rendered prompts to stderr for debugging
   std::string chat_template =
       "auto"; // "auto" uses template from model, or specify a built-in template
 };
@@ -126,6 +127,7 @@ private:
   std::string model_path_;
   std::string mmproj_path_;
   std::string chat_template_;
+  bool log_prompts_ = false;
   int n_batch_ = 512; // Batch size for prompt processing
   TokenList cached_tokens_;
   std::mutex inference_mutex_;

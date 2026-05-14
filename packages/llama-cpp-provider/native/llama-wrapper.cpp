@@ -31,12 +31,13 @@ LlamaModel::~LlamaModel() {
 LlamaModel::LlamaModel(LlamaModel &&other) noexcept
     : model_(other.model_), ctx_(other.ctx_), sampler_(other.sampler_), mtmd_ctx_(other.mtmd_ctx_),
       model_path_(std::move(other.model_path_)), mmproj_path_(std::move(other.mmproj_path_)),
-      chat_template_(std::move(other.chat_template_)), n_batch_(other.n_batch_),
-      cached_tokens_(std::move(other.cached_tokens_)) {
+      chat_template_(std::move(other.chat_template_)), log_prompts_(other.log_prompts_),
+      n_batch_(other.n_batch_), cached_tokens_(std::move(other.cached_tokens_)) {
   other.model_ = nullptr;
   other.ctx_ = nullptr;
   other.sampler_ = nullptr;
   other.mtmd_ctx_ = nullptr;
+  other.log_prompts_ = false;
 }
 
 LlamaModel &LlamaModel::operator=(LlamaModel &&other) noexcept {
@@ -49,12 +50,14 @@ LlamaModel &LlamaModel::operator=(LlamaModel &&other) noexcept {
     model_path_ = std::move(other.model_path_);
     mmproj_path_ = std::move(other.mmproj_path_);
     chat_template_ = std::move(other.chat_template_);
+    log_prompts_ = other.log_prompts_;
     n_batch_ = other.n_batch_;
     cached_tokens_ = std::move(other.cached_tokens_);
     other.model_ = nullptr;
     other.ctx_ = nullptr;
     other.sampler_ = nullptr;
     other.mtmd_ctx_ = nullptr;
+    other.log_prompts_ = false;
   }
   return *this;
 }
@@ -86,6 +89,7 @@ bool LlamaModel::load(const ModelParams &params) {
   model_path_ = params.model_path;
   mmproj_path_ = params.mmproj_path;
   chat_template_ = params.chat_template;
+  log_prompts_ = params.log_prompts;
 
   if (!mmproj_path_.empty()) {
     mtmd_context_params mtmd_params = mtmd_context_params_default();
@@ -127,6 +131,8 @@ void LlamaModel::unload() {
   }
   model_path_.clear();
   mmproj_path_.clear();
+  chat_template_.clear();
+  log_prompts_ = false;
   cached_tokens_.clear();
 }
 
@@ -598,6 +604,10 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
         "'gemma', or use debug: true for llama.cpp template diagnostics.";
     return result;
   }
+  if (log_prompts_) {
+    fprintf(stderr, "\n--- llama.cpp rendered prompt ---\n%s\n--- end prompt ---\n",
+            prompt.c_str());
+  }
 
   std::vector<std::vector<unsigned char>> images;
   for (const auto &message : messages) {
@@ -710,6 +720,10 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
         "Failed to apply chat template. Try setting chatTemplate explicitly, for example "
         "'gemma', or use debug: true for llama.cpp template diagnostics.";
     return result;
+  }
+  if (log_prompts_) {
+    fprintf(stderr, "\n--- llama.cpp rendered prompt ---\n%s\n--- end prompt ---\n",
+            prompt.c_str());
   }
 
   std::vector<std::vector<unsigned char>> images;

@@ -66,6 +66,13 @@ export interface LlamaCppModelConfig {
    */
   debug?: boolean;
   /**
+   * Print the final chat-template-rendered prompt sent to llama.cpp to stderr.
+   *
+   * This may include private user data. Intended for local debugging only.
+   * Default: false
+   */
+  logPrompts?: boolean;
+  /**
    * Chat template to use for formatting messages.
    * - "auto" (default): Use the template embedded in the GGUF model file
    * - Template name: Use a specific built-in template (e.g., "llama3", "chatml", "gemma")
@@ -845,6 +852,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
         gpuLayers: this.config.gpuLayers ?? 99,
         threads: this.config.threads ?? 4,
         debug: this.config.debug ?? false,
+        logPrompts: this.config.logPrompts ?? false,
         chatTemplate: this.config.chatTemplate ?? "auto",
       };
 

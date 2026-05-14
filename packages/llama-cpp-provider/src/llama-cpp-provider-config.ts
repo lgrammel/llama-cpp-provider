@@ -196,6 +196,13 @@ export interface LlamaCppProviderConfig {
   debug?: boolean;
 
   /**
+   * Print the final chat-template-rendered prompt sent to llama.cpp to stderr.
+   *
+   * This may include private user data. Intended for local debugging only.
+   */
+  logPrompts?: boolean;
+
+  /**
    * Optional prompt cache. Set to `{ mode: "prefix" }` to reuse llama.cpp KV
    * cache state when a request starts with the previous request/response tokens.
    */
