@@ -1,5 +1,11 @@
 # @lgrammel/llama-cpp-provider
 
+## 0.2.2
+
+### Patch Changes
+
+- 8e11c37: Fix prompt caching so generated assistant text stays in the native cache across later turns.
+
 ## 0.2.1
 
 ### Patch Changes
