@@ -28,6 +28,23 @@ describe("llamaCpp", () => {
       expect(model.modelId).toBe("/path/to/my-model.gguf");
     });
 
+    it("exposes the configured context size", () => {
+      const model = llamaCpp({
+        modelPath: "/path/to/model.gguf",
+        contextSize: 4096,
+      });
+
+      expect(model.contextSize).toBe(4096);
+    });
+
+    it("exposes the default context size", () => {
+      const model = llamaCpp({
+        modelPath: "/path/to/model.gguf",
+      });
+
+      expect(model.contextSize).toBe(2048);
+    });
+
     it("accepts machine-specific load options at the top level", () => {
       const model = llamaCpp({
         modelPath: "/path/to/model.gguf",
@@ -198,5 +215,6 @@ describe("LlamaCppLanguageModel constructor", () => {
     });
 
     expect(model.modelId).toBe("/direct/path.gguf");
+    expect(model.contextSize).toBe(1024);
   });
 });

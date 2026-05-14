@@ -800,6 +800,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   readonly specificationVersion = "v4" as const;
   readonly provider = "llama.cpp";
   readonly modelId: string;
+  readonly contextSize: number;
 
   /**
    * Supported URL patterns - empty since we only support local files
@@ -815,6 +816,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   constructor(config: LlamaCppModelConfig) {
     this.config = config;
     this.modelId = config.modelPath;
+    this.contextSize = config.contextSize ?? 2048;
   }
 
   private async ensureModelLoaded(): Promise<number> {
@@ -830,12 +832,11 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
     }
 
     this.initPromise = (async () => {
-      const requestedContextSize = this.config.contextSize ?? 2048;
       const memorySafety = await checkModelMemorySafety({
         modelPath: this.config.modelPath,
         mmprojPath: this.config.mmprojPath,
         memory: this.config.memory,
-        contextSize: requestedContextSize,
+        contextSize: this.contextSize,
         memorySafety: this.config.memorySafety,
       });
       const options: LoadModelOptions = {
