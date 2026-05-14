@@ -1,5 +1,11 @@
 # @lgrammel/llama-cpp-provider
 
+## 0.2.4
+
+### Patch Changes
+
+- 650a30f: Update the bundled llama.cpp revision.
+
 ## 0.2.3
 
 ### Patch Changes
