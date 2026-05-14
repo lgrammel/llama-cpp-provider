@@ -393,15 +393,6 @@ bool LlamaModel::trim_cached_tokens(size_t keep_tokens) {
   return true;
 }
 
-size_t LlamaModel::matching_cached_prefix(const std::vector<int32_t> &tokens) const {
-  const size_t max_prefix = std::min(cached_tokens_.size(), tokens.size());
-  size_t prefix = 0;
-  while (prefix < max_prefix && cached_tokens_[prefix] == tokens[prefix]) {
-    prefix++;
-  }
-  return prefix;
-}
-
 bool LlamaModel::decode_tokens(const std::vector<int32_t> &tokens, size_t offset, size_t count,
                                int start_pos, bool logits_last, GenerationResult &result,
                                const std::string &error_message) {
@@ -434,6 +425,23 @@ bool LlamaModel::decode_tokens(const std::vector<int32_t> &tokens, size_t offset
   return true;
 }
 
+bool LlamaModel::sync_cached_tokens_to_text(const std::string &text) {
+  GenerationResult sync_result;
+  return sync_prompt_cache_to_text(cached_tokens_, text, create_prompt_cache_ops(sync_result));
+}
+
+PromptCacheOps LlamaModel::create_prompt_cache_ops(GenerationResult &result) {
+  return {
+      [this](const std::string &text) { return tokenize(text, true); },
+      [this](size_t keep_tokens) { return trim_cached_tokens(keep_tokens); },
+      [this]() { clear_context_memory(true); },
+      [this, &result](const TokenList &tokens, size_t offset, size_t count, int start_pos) {
+        return decode_tokens(tokens, offset, count, start_pos, true, result,
+                             "Failed to decode cached tokens");
+      },
+  };
+}
+
 bool LlamaModel::prefill_prompt(const std::string &prompt,
                                 const std::vector<std::vector<unsigned char>> &images,
                                 const GenerationParams &params, GenerationResult &result,
@@ -451,37 +459,15 @@ bool LlamaModel::prefill_prompt(const std::string &prompt,
       return false;
     }
 
-    size_t cached_prefix = params.prompt_cache ? matching_cached_prefix(prompt_tokens) : 0;
-    if (cached_prefix == prompt_tokens.size() && cached_prefix < cached_tokens_.size() &&
-        cached_prefix > 0) {
-      // If the next prompt is a shorter prefix of cached state, re-evaluate the
-      // last kept token so llama.cpp logits correspond to the new prompt end.
-      cached_prefix--;
-    }
-    if (params.prompt_cache && cached_prefix > 0) {
-      if (!trim_cached_tokens(cached_prefix)) {
-        cached_prefix = 0;
-      }
-    }
-    if (!params.prompt_cache || cached_prefix == 0) {
-      clear_context_memory(true);
-      cached_tokens_.clear();
-      cached_prefix = 0;
-    }
-
-    const size_t suffix_tokens = prompt_tokens.size() - cached_prefix;
-    if (suffix_tokens > 0 &&
-        !decode_tokens(prompt_tokens, cached_prefix, suffix_tokens, static_cast<int>(cached_prefix),
-                       true, result, "Failed to decode prompt")) {
-      cached_tokens_.clear();
+    const PromptCachePrefillResult cache_result = prefill_prompt_cache(
+        cached_tokens_, prompt_tokens, params.prompt_cache, create_prompt_cache_ops(result));
+    if (!cache_result.ok) {
       return false;
     }
 
-    result.cache_read_tokens = static_cast<int>(cached_prefix);
-    result.cache_write_tokens = static_cast<int>(suffix_tokens);
-    cached_tokens_ = prompt_tokens;
-
-    n_past = static_cast<int>(prompt_tokens.size());
+    result.cache_read_tokens = cache_result.cache_read_tokens;
+    result.cache_write_tokens = cache_result.cache_write_tokens;
+    n_past = cache_result.n_past;
     return true;
   }
 
@@ -637,6 +623,8 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
 
   if (!params.prompt_cache) {
     cached_tokens_.clear();
+  } else {
+    sync_cached_tokens_to_text(prompt + generated_text);
   }
 
   if (result.finish_reason == "error" && result.completion_tokens >= params.max_tokens) {
@@ -738,6 +726,8 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
 
   if (!params.prompt_cache) {
     cached_tokens_.clear();
+  } else {
+    sync_cached_tokens_to_text(prompt + generated_text);
   }
 
   if (result.finish_reason == "error" && result.completion_tokens >= params.max_tokens) {

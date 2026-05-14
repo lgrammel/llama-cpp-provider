@@ -1,6 +1,7 @@
 #ifndef LLAMA_WRAPPER_H
 #define LLAMA_WRAPPER_H
 
+#include "prompt-cache.h"
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -120,7 +121,7 @@ private:
   std::string mmproj_path_;
   std::string chat_template_;
   int n_batch_ = 512; // Batch size for prompt processing
-  std::vector<int32_t> cached_tokens_;
+  TokenList cached_tokens_;
   std::mutex inference_mutex_;
 
   // Tokenize a string
@@ -140,9 +141,10 @@ private:
 
   void clear_context_memory(bool data);
   bool trim_cached_tokens(size_t keep_tokens);
-  size_t matching_cached_prefix(const std::vector<int32_t> &tokens) const;
   bool decode_tokens(const std::vector<int32_t> &tokens, size_t offset, size_t count, int start_pos,
                      bool logits_last, GenerationResult &result, const std::string &error_message);
+  bool sync_cached_tokens_to_text(const std::string &text);
+  PromptCacheOps create_prompt_cache_ops(GenerationResult &result);
 
   // Prefill the prompt into the context and return the number of consumed positions.
   bool prefill_prompt(const std::string &prompt,

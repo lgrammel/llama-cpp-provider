@@ -21,6 +21,7 @@
     "test:run": "pnpm --filter @lgrammel/llama-cpp-provider test:run",
     "test:unit": "pnpm --filter @lgrammel/llama-cpp-provider test:unit",
     "test:integration": "pnpm --filter @lgrammel/llama-cpp-provider test:integration",
+    "test:native": "pnpm --filter @lgrammel/llama-cpp-provider test:native",
     "test:e2e": "pnpm --filter @tests/e2e test:run",
     "test:coverage": "pnpm --filter @lgrammel/llama-cpp-provider test:coverage",
     "typecheck": "pnpm --filter @lgrammel/llama-cpp-provider typecheck && pnpm --filter @examples/basic typecheck && pnpm --filter @tests/e2e typecheck",

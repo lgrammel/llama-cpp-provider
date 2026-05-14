@@ -1077,6 +1077,108 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       await cachedModel.dispose();
     });
+
+    it("preserves generated tool-call JSON across later cached turns", async () => {
+      const cachedModel = new LlamaCppLanguageModel({
+        modelPath: "/test/model.gguf",
+        cache: { mode: "prefix" },
+      });
+      const rawToolCall =
+        '{"name": "get_weather", "arguments": {"location": "Tokyo"}}';
+
+      vi.mocked(nativeBinding.generate)
+        .mockResolvedValueOnce({
+          text: rawToolCall,
+          promptTokens: 100,
+          completionTokens: 20,
+          finishReason: "stop",
+        })
+        .mockResolvedValueOnce({
+          text: "It is 72 degrees in Tokyo.",
+          promptTokens: 130,
+          completionTokens: 8,
+          cacheReadTokens: 120,
+          cacheWriteTokens: 10,
+          finishReason: "stop",
+        })
+        .mockResolvedValueOnce({
+          text: "Yes, it is warm.",
+          promptTokens: 150,
+          completionTokens: 6,
+          cacheReadTokens: 140,
+          cacheWriteTokens: 10,
+          finishReason: "stop",
+        });
+
+      const first = await cachedModel.doGenerate({
+        prompt: testMessages,
+        tools: testTools,
+      });
+      const toolCall = first.content.find((part) => part.type === "tool-call");
+
+      expect(toolCall).toBeDefined();
+
+      const afterToolPrompt: LanguageModelV4Message[] = [
+        ...testMessages,
+        {
+          role: "assistant",
+          content: [toolCall!],
+        },
+        {
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: toolCall!.toolCallId,
+              toolName: toolCall!.toolName,
+              output: {
+                type: "json",
+                value: { location: "Tokyo", temperature: 72 },
+              },
+            },
+          ],
+        },
+      ];
+
+      const second = await cachedModel.doGenerate({
+        prompt: afterToolPrompt,
+        tools: testTools,
+      });
+      const secondText = second.content.find((part) => part.type === "text");
+
+      expect(secondText).toBeDefined();
+
+      await cachedModel.doGenerate({
+        prompt: [
+          ...afterToolPrompt,
+          {
+            role: "assistant",
+            content: [secondText!],
+          },
+          {
+            role: "user",
+            content: [{ type: "text", text: "Is that warm?" }],
+          },
+        ],
+        tools: testTools,
+      });
+
+      expect(nativeBinding.generate).toHaveBeenNthCalledWith(
+        3,
+        expect.any(Number),
+        expect.objectContaining({
+          promptCache: true,
+          messages: expect.arrayContaining([
+            {
+              role: "assistant",
+              content: rawToolCall,
+            },
+          ]),
+        })
+      );
+
+      await cachedModel.dispose();
+    });
   });
 
   describe("doStream with tools", () => {

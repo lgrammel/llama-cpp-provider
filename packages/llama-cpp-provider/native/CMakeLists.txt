@@ -68,6 +68,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/ggml/include)
 add_library(${PROJECT_NAME} SHARED
     binding.cpp
     llama-wrapper.cpp
+    prompt-cache.cpp
 )
 
 # Set output name and extension
@@ -98,5 +99,15 @@ if(APPLE)
         "-framework Metal"
         "-framework MetalKit"
     )
+endif()
+
+if(LLAMA_PROVIDER_BUILD_TESTS)
+    add_executable(prompt_cache_test
+        prompt-cache.test.cpp
+        prompt-cache.cpp
+    )
+    target_compile_features(prompt_cache_test PRIVATE cxx_std_17)
+
+    add_test(NAME prompt_cache_test COMMAND prompt_cache_test)
 endif()
 
