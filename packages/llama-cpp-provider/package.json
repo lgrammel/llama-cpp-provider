@@ -50,13 +50,13 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lgrammel/ai-sdk-llama-cpp.git",
+    "url": "git+https://github.com/lgrammel/llama-cpp-provider.git",
     "directory": "packages/llama-cpp-provider"
   },
   "bugs": {
-    "url": "https://github.com/lgrammel/ai-sdk-llama-cpp/issues"
+    "url": "https://github.com/lgrammel/llama-cpp-provider/issues"
   },
-  "homepage": "https://github.com/lgrammel/ai-sdk-llama-cpp#readme",
+  "homepage": "https://github.com/lgrammel/llama-cpp-provider#readme",
   "engines": {
     "node": ">=18.0.0"
   },
