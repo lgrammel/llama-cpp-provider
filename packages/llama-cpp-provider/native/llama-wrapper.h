@@ -3,6 +3,7 @@
 
 #include "prompt-cache.h"
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -48,6 +49,7 @@ struct GenerationParams {
   float temperature = 0.7f;
   float top_p = 0.9f;
   int top_k = 40;
+  uint32_t seed = 0xFFFFFFFFu; // LLAMA_DEFAULT_SEED: use a random seed
   float repeat_penalty = 1.1f;
   std::vector<std::string> stop_sequences;
   std::string grammar; // GBNF grammar string for structured output

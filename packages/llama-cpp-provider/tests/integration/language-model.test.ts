@@ -164,6 +164,7 @@ describe("LlamaCppLanguageModel Integration", () => {
         temperature: 0.5,
         topP: 0.8,
         topK: 30,
+        seed: 1234,
         stopSequences: ["END"],
       });
 
@@ -174,9 +175,21 @@ describe("LlamaCppLanguageModel Integration", () => {
           temperature: 0.5,
           topP: 0.8,
           topK: 30,
+          seed: 1234,
           stopSequences: ["END"],
         })
       );
+    });
+
+    it("rejects invalid seed values", async () => {
+      await expect(
+        model.doGenerate({
+          prompt: testMessages,
+          seed: -1,
+        })
+      ).rejects.toThrow("seed must be an integer between 0 and 4294967295");
+
+      expect(nativeBinding.generate).not.toHaveBeenCalled();
     });
 
     it("rejects and cancels native generation when aborted", async () => {
@@ -494,6 +507,23 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       expect(result.request).toHaveProperty("body");
       expect(result.request!.body).toHaveProperty("maxTokens", 100);
+    });
+
+    it("passes seed to streaming generation", async () => {
+      const result = await model.doStream({
+        prompt: testMessages,
+        seed: 5678,
+      });
+
+      await collectStreamParts(result.stream);
+
+      expect(nativeBinding.generateStream).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          seed: 5678,
+        }),
+        expect.any(Function)
+      );
     });
 
     it("emits stream-start as first part", async () => {
@@ -1106,6 +1136,92 @@ describe("LlamaCppLanguageModel Integration", () => {
       // Should be returned as text, not parsed as tool call
       expect(result.content).toHaveLength(1);
       expect(result.content[0].type).toBe("text");
+    });
+
+    it("uses tool-call grammar when toolChoice is required", async () => {
+      vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
+        text: '{"tool_calls":[{"id":"call_123","name":"get_weather","arguments":{"location":"Tokyo"}}]}',
+        promptTokens: 100,
+        completionTokens: 20,
+        finishReason: "stop",
+      });
+
+      const result = await model.doGenerate({
+        prompt: testMessages,
+        tools: testTools,
+        toolChoice: { type: "required" },
+      });
+
+      expect(nativeBinding.generate).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          grammar: expect.stringContaining("tool-calls-kv"),
+        })
+      );
+      expect(result.content[0].type).toBe("tool-call");
+      expect(result.finishReason.unified).toBe("tool-calls");
+    });
+
+    it("uses only the selected tool for toolChoice tool", async () => {
+      const tools = [
+        ...testTools,
+        {
+          type: "function" as const,
+          name: "search",
+          description: "Search",
+          inputSchema: {
+            type: "object",
+            properties: {
+              query: { type: "string" },
+            },
+          },
+        },
+      ];
+
+      vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
+        text: '{"tool_calls":[{"id":"call_123","name":"search","arguments":{"query":"llama.cpp"}}]}',
+        promptTokens: 100,
+        completionTokens: 20,
+        finishReason: "stop",
+      });
+
+      await model.doGenerate({
+        prompt: testMessages,
+        tools,
+        toolChoice: { type: "tool", toolName: "search" },
+      });
+
+      expect(nativeBinding.generate).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          grammar: expect.stringContaining('\\"search\\"'),
+          messages: expect.arrayContaining([
+            expect.objectContaining({
+              role: "system",
+              content: expect.stringContaining(
+                'You must call the "search" tool'
+              ),
+            }),
+          ]),
+        })
+      );
+      const generateCall = vi.mocked(nativeBinding.generate).mock.calls.at(-1);
+      expect(generateCall?.[1].grammar).not.toContain('\\"get_weather\\"');
+      expect(generateCall?.[1].messages[0].content).not.toContain(
+        "get_weather"
+      );
+    });
+
+    it("throws when toolChoice tool references an unknown function tool", async () => {
+      await expect(
+        model.doGenerate({
+          prompt: testMessages,
+          tools: testTools,
+          toolChoice: { type: "tool", toolName: "search" },
+        })
+      ).rejects.toThrow("toolChoice references unknown function tool: search");
+
+      expect(nativeBinding.generate).not.toHaveBeenCalled();
     });
 
     it("preserves generated tool-call JSON in later cached prompts", async () => {

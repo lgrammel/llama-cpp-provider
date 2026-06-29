@@ -55,6 +55,7 @@ export interface GenerateOptions {
   temperature?: number;
   topP?: number;
   topK?: number;
+  seed?: number;
   stopSequences?: string[];
   /** GBNF grammar string for structured output */
   grammar?: string;

@@ -67,8 +67,9 @@ describe("Tool Calling", () => {
       // Should contain both tool names
       expect(grammar).toContain("get_weather");
       expect(grammar).toContain("search");
-      // Should have alternatives for tool names
-      expect(grammar).toContain("tool-name");
+      // Should have per-tool call alternatives that bind name and args together.
+      expect(grammar).toContain("get_weather-call");
+      expect(grammar).toContain("search-call");
     });
 
     it("handles tools with complex parameters", () => {
@@ -332,6 +333,24 @@ describe("Tool Calling", () => {
 
       expect(prompt).toContain("city");
       expect(prompt).toContain("string");
+    });
+
+    it("adds required-tool instruction for forced tool choice", () => {
+      const tools: LanguageModelV4FunctionTool[] = [
+        {
+          type: "function",
+          name: "get_weather",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ];
+
+      const prompt = buildToolSystemPrompt(tools, {
+        type: "tool",
+        toolName: "get_weather",
+      });
+
+      expect(prompt).toContain('You must call the "get_weather" tool');
+      expect(prompt).toContain("Do not answer with normal text");
     });
   });
 

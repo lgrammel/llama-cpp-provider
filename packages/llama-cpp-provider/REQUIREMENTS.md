@@ -42,7 +42,10 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 - Generation calls must pass converted chat messages to the native binding.
 - Default generation options must be `maxTokens: 2048`, `temperature: 0.7`, `topP: 0.9`, and `topK: 40`.
 - AI SDK `maxOutputTokens`, `temperature`, `topP`, `topK`, and `stopSequences` must be forwarded to native generation.
+- AI SDK `seed` must be forwarded to native generation when provided.
+- Omitted `seed` must use llama.cpp random seeding.
 - `maxOutputTokens` must be a positive integer and must not exceed the loaded context size.
+- `seed` must be an integer between 0 and 4294967295 when provided.
 - Native `stop` and `length` finish reasons must map to AI SDK finish reasons with the same unified value; other native finish reasons must map to `other`.
 - Usage must report prompt tokens as input tokens and completion tokens as output text tokens.
 - Native generation errors must reject the generation call.
@@ -54,6 +57,7 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 - Text streams must emit `text-start`, `text-delta`, and `text-end` parts with a stable text ID.
 - Streams must end with a `finish` part containing finish reason and usage.
 - Streaming token callbacks must surface native tokens as text deltas unless tool-call detection suppresses them.
+- Streaming must not emit configured stop sequence text as text deltas.
 
 ## Message Conversion
 
@@ -86,6 +90,9 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 
 - Function tools must add a system prompt that lists tool names, descriptions, and input schemas.
 - Tool prompting must be skipped when `toolChoice.type` is `"none"`.
+- `toolChoice.type: "required"` must constrain generation with a tool-call grammar that allows one of the provided function tools.
+- `toolChoice.type: "tool"` must constrain generation with a tool-call grammar for the selected function tool.
+- `toolChoice.type: "tool"` must reject unknown function tool names before native generation.
 - Tool output parsing must accept a single JSON object, an array of JSON objects, or a legacy `tool_calls` wrapper.
 - Parsed tool calls must produce AI SDK `tool-call` content with JSON-stringified arguments.
 - Parsed tool calls must set the unified finish reason to `tool-calls`.

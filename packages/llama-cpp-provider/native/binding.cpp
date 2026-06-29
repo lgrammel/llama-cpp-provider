@@ -11,7 +11,7 @@ class GenerateWorker;
 class StreamGenerateWorker;
 
 // Global state for managing models
-static std::unordered_map<int, std::unique_ptr<llama_wrapper::LlamaModel>> g_models;
+static std::unordered_map<int, std::shared_ptr<llama_wrapper::LlamaModel>> g_models;
 static std::mutex g_models_mutex;
 static std::atomic<int> g_next_handle{1};
 
@@ -79,7 +79,7 @@ public:
 
     {
       std::lock_guard<std::mutex> lock(g_models_mutex);
-      g_models[handle_] = std::move(model);
+      g_models[handle_] = std::shared_ptr<llama_wrapper::LlamaModel>(std::move(model));
     }
 
     success_ = true;
@@ -120,7 +120,7 @@ public:
   void Cancel() { cancellation_->cancelled.store(true); }
 
   void Execute() override {
-    llama_wrapper::LlamaModel *model = nullptr;
+    std::shared_ptr<llama_wrapper::LlamaModel> model;
 
     {
       std::lock_guard<std::mutex> lock(g_models_mutex);
@@ -129,7 +129,7 @@ public:
         SetError("Invalid model handle");
         return;
       }
-      model = it->second.get();
+      model = it->second;
     }
 
     result_ = model->generate(messages_, params_, *cancellation_);
@@ -187,7 +187,7 @@ public:
   void Cancel() { cancellation_->cancelled.store(true); }
 
   void Execute() override {
-    llama_wrapper::LlamaModel *model = nullptr;
+    std::shared_ptr<llama_wrapper::LlamaModel> model;
 
     {
       std::lock_guard<std::mutex> lock(g_models_mutex);
@@ -196,7 +196,7 @@ public:
         SetError("Invalid model handle");
         return;
       }
-      model = it->second.get();
+      model = it->second;
     }
 
     // Stream tokens during generation using thread-safe function
@@ -278,7 +278,7 @@ public:
       : Napi::AsyncWorker(callback), handle_(handle), texts_(texts) {}
 
   void Execute() override {
-    llama_wrapper::LlamaModel *model = nullptr;
+    std::shared_ptr<llama_wrapper::LlamaModel> model;
 
     {
       std::lock_guard<std::mutex> lock(g_models_mutex);
@@ -287,7 +287,7 @@ public:
         SetError("Invalid model handle");
         return;
       }
-      model = it->second.get();
+      model = it->second;
     }
 
     result_ = model->embed(texts_);
@@ -491,6 +491,9 @@ Napi::Value Generate(const Napi::CallbackInfo &info) {
                            : 0.7f;
   params.top_p = options.Has("topP") ? options.Get("topP").As<Napi::Number>().FloatValue() : 0.9f;
   params.top_k = options.Has("topK") ? options.Get("topK").As<Napi::Number>().Int32Value() : 40;
+  params.seed = options.Has("seed") && options.Get("seed").IsNumber()
+                    ? options.Get("seed").As<Napi::Number>().Uint32Value()
+                    : 0xFFFFFFFFu;
 
   if (options.Has("stopSequences") && options.Get("stopSequences").IsArray()) {
     Napi::Array stop_arr = options.Get("stopSequences").As<Napi::Array>();
@@ -546,6 +549,9 @@ Napi::Value GenerateStream(const Napi::CallbackInfo &info) {
                            : 0.7f;
   params.top_p = options.Has("topP") ? options.Get("topP").As<Napi::Number>().FloatValue() : 0.9f;
   params.top_k = options.Has("topK") ? options.Get("topK").As<Napi::Number>().Int32Value() : 40;
+  params.seed = options.Has("seed") && options.Get("seed").IsNumber()
+                    ? options.Get("seed").As<Napi::Number>().Uint32Value()
+                    : 0xFFFFFFFFu;
 
   if (options.Has("stopSequences") && options.Get("stopSequences").IsArray()) {
     Napi::Array stop_arr = options.Get("stopSequences").As<Napi::Array>();

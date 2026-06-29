@@ -8,6 +8,7 @@ import type {
   LanguageModelV4Message,
   LanguageModelV4StreamPart,
   LanguageModelV4StreamResult,
+  LanguageModelV4ToolChoice,
   LanguageModelV4Usage,
   SharedV4Warning,
 } from "@ai-sdk/provider";
@@ -453,8 +454,9 @@ export interface ParsedToolCall {
 export function generateToolCallGrammar(
   tools: LanguageModelV4FunctionTool[]
 ): string {
-  // Create a grammar that allows the model to output a tool call
-  // Format: {"tool_calls":[{"id":"...","name":"...","arguments":{...}}]}
+  if (tools.length === 0) {
+    throw new Error("At least one function tool is required");
+  }
 
   // Generate the tool-specific argument schemas
   const toolGrammars: string[] = [];
@@ -475,14 +477,6 @@ export function generateToolCallGrammar(
     toolGrammars.push(...lines);
   }
 
-  // Build the complete grammar
-  const toolNameAlternatives = tools
-    .map((t) => `"\\"${t.name}\\""`)
-    .join(" | ");
-
-  // Build arguments alternatives based on tool names
-  const toolArgsAlternatives = tools.map((t) => `${t.name}-args`).join(" | ");
-
   // Combine all grammars
   const uniqueRules = new Map<string, string>();
 
@@ -500,12 +494,12 @@ export function generateToolCallGrammar(
   // Root rule - a tool call object
   grammar += `root ::= "{" space tool-calls-kv "}" space\n`;
   grammar += `tool-calls-kv ::= "\\"tool_calls\\"" space ":" space "[" space tool-call (space "," space tool-call)* space "]"\n`;
-  grammar += `tool-call ::= "{" space id-kv "," space name-kv "," space args-kv "}" space\n`;
+  grammar += `tool-call ::= ${tools.map((tool) => `${tool.name}-call`).join(" | ")}\n`;
   grammar += `id-kv ::= "\\"id\\"" space ":" space string\n`;
-  grammar += `name-kv ::= "\\"name\\"" space ":" space tool-name\n`;
-  grammar += `tool-name ::= ${toolNameAlternatives}\n`;
-  grammar += `args-kv ::= "\\"arguments\\"" space ":" space tool-args\n`;
-  grammar += `tool-args ::= ${toolArgsAlternatives}\n`;
+
+  for (const tool of tools) {
+    grammar += `${tool.name}-call ::= "{" space id-kv "," space "\\"name\\"" space ":" space "\\"${tool.name}\\"" space "," space "\\"arguments\\"" space ":" space ${tool.name}-args "}" space\n`;
+  }
 
   // Add all the tool-specific rules
   for (const [name, rule] of uniqueRules) {
@@ -609,7 +603,8 @@ function toolCallCacheKey(toolCallIds: string[]): string {
  * Build a system prompt that instructs the model to use tools.
  */
 export function buildToolSystemPrompt(
-  tools: LanguageModelV4FunctionTool[]
+  tools: LanguageModelV4FunctionTool[],
+  toolChoice?: LanguageModelV4ToolChoice
 ): string {
   const toolDescriptions = tools
     .map((tool) => {
@@ -618,9 +613,21 @@ export function buildToolSystemPrompt(
     })
     .join("\n\n");
 
+  const toolChoiceInstruction =
+    toolChoice?.type === "required"
+      ? "\nYou must call one of these tools. Do not answer with normal text.\n"
+      : toolChoice?.type === "tool"
+        ? `\nYou must call the "${toolChoice.toolName}" tool. Do not answer with normal text.\n`
+        : "";
+  const finalRule =
+    toolChoice?.type === "required" || toolChoice?.type === "tool"
+      ? "- Do not answer with normal text"
+      : "- If you don't need to use a tool, respond normally with text";
+
   return `You have access to the following tools:
 
 ${toolDescriptions}
+${toolChoiceInstruction}
 
 When you need to use a tool, respond ONLY with a JSON object in this exact format (no other text):
 {"name": "<tool_name>", "arguments": {<tool_arguments>}}
@@ -632,7 +639,7 @@ Rules:
 - The "name" must exactly match one of the available tool names
 - The "arguments" must be a valid JSON object matching the tool's parameter schema
 - Output ONLY the JSON, no explanation or other text
-- If you don't need to use a tool, respond normally with text`;
+${finalRule}`;
 }
 
 /**
@@ -643,7 +650,8 @@ export function convertMessages(
   messages: LanguageModelV4Message[],
   tools?: LanguageModelV4FunctionTool[],
   reasoning?: Pick<ResolvedReasoningConfig, "promptPrefix">,
-  toolCallContentCache?: ReadonlyMap<string, string>
+  toolCallContentCache?: ReadonlyMap<string, string>,
+  toolChoice?: LanguageModelV4ToolChoice
 ): ChatMessage[] {
   const result: ChatMessage[] = [];
   let reasoningPromptAdded = false;
@@ -669,7 +677,7 @@ export function convertMessages(
   if (tools && tools.length > 0) {
     addMessage({
       role: "system",
-      content: buildToolSystemPrompt(tools),
+      content: buildToolSystemPrompt(tools, toolChoice),
     });
   }
 
@@ -803,6 +811,50 @@ export function convertMessages(
   return result;
 }
 
+function resolveActiveFunctionTools(
+  functionTools: LanguageModelV4FunctionTool[],
+  toolChoice: LanguageModelV4ToolChoice | undefined
+): {
+  tools?: LanguageModelV4FunctionTool[];
+  parseToolCalls: boolean;
+  grammar?: string;
+} {
+  if (functionTools.length === 0 || toolChoice?.type === "none") {
+    return { parseToolCalls: false };
+  }
+
+  if (toolChoice?.type === "tool") {
+    const selectedTool = functionTools.find(
+      (tool) => tool.name === toolChoice.toolName
+    );
+
+    if (!selectedTool) {
+      throw new Error(
+        `toolChoice references unknown function tool: ${toolChoice.toolName}`
+      );
+    }
+
+    return {
+      tools: [selectedTool],
+      parseToolCalls: true,
+      grammar: generateToolCallGrammar([selectedTool]),
+    };
+  }
+
+  if (toolChoice?.type === "required") {
+    return {
+      tools: functionTools,
+      parseToolCalls: true,
+      grammar: generateToolCallGrammar(functionTools),
+    };
+  }
+
+  return {
+    tools: functionTools,
+    parseToolCalls: true,
+  };
+}
+
 export class LlamaCppLanguageModel implements LanguageModelV4 {
   readonly specificationVersion = "v4" as const;
   readonly provider = "llama.cpp";
@@ -888,22 +940,15 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
     throwIfAborted(options.abortSignal);
     const handle = await this.ensureModelLoaded();
     // Convert JSON schema to GBNF grammar if structured output is requested
-    // Note: Tool calls do NOT use grammar - the model decides whether to call tools
-    let grammar: string | undefined;
+    let responseGrammar: string | undefined;
     if (
       options.responseFormat?.type === "json" &&
       options.responseFormat.schema
     ) {
-      grammar = convertJsonSchemaToGrammar(
+      responseGrammar = convertJsonSchemaToGrammar(
         options.responseFormat.schema as JSONSchema7
       );
     }
-
-    const reasoningConfig = resolveCallReasoningConfig(
-      options,
-      this.config.reasoning,
-      grammar
-    );
 
     // Extract function tools from the tools array
     const functionTools =
@@ -911,15 +956,31 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
         (t): t is LanguageModelV4FunctionTool => t.type === "function"
       ) ?? [];
 
-    const hasTools = functionTools.length > 0;
+    const toolSettings = resolveActiveFunctionTools(
+      functionTools,
+      options.toolChoice
+    );
+
+    if (responseGrammar && toolSettings.grammar) {
+      throw new Error(
+        "Structured JSON response format cannot be combined with required toolChoice."
+      );
+    }
+
+    const grammar = responseGrammar ?? toolSettings.grammar;
+
+    const reasoningConfig = resolveCallReasoningConfig(
+      options,
+      this.config.reasoning,
+      grammar
+    );
 
     const messages = convertMessages(
       options.prompt,
-      hasTools && options.toolChoice?.type !== "none"
-        ? functionTools
-        : undefined,
+      toolSettings.tools,
       reasoningConfig,
-      this.toolCallContentCache
+      this.toolCallContentCache,
+      options.toolChoice
     );
 
     const generateOptions: GenerateOptions = {
@@ -931,6 +992,10 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       stopSequences: options.stopSequences,
       grammar,
     };
+    if (options.seed !== undefined) {
+      validateGenerationSeed(options.seed);
+      generateOptions.seed = options.seed;
+    }
     if (this.config.cache?.mode === "prefix") {
       generateOptions.promptCache = true;
     }
@@ -954,7 +1019,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
     let finishReason = convertFinishReason(result.finishReason);
 
     // Try to parse tool calls if tools were provided
-    if (hasTools && options.toolChoice?.type !== "none") {
+    if (toolSettings.parseToolCalls) {
       const toolCalls = parseToolCalls(visibleText);
 
       if (toolCalls && toolCalls.length > 0) {
@@ -1011,22 +1076,15 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
     throwIfAborted(options.abortSignal);
     const handle = await this.ensureModelLoaded();
     // Convert JSON schema to GBNF grammar if structured output is requested
-    // Note: Tool calls do NOT use grammar - the model decides whether to call tools
-    let grammar: string | undefined;
+    let responseGrammar: string | undefined;
     if (
       options.responseFormat?.type === "json" &&
       options.responseFormat.schema
     ) {
-      grammar = convertJsonSchemaToGrammar(
+      responseGrammar = convertJsonSchemaToGrammar(
         options.responseFormat.schema as JSONSchema7
       );
     }
-
-    const reasoningConfig = resolveCallReasoningConfig(
-      options,
-      this.config.reasoning,
-      grammar
-    );
 
     // Extract function tools from the tools array
     const functionTools =
@@ -1034,15 +1092,31 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
         (t): t is LanguageModelV4FunctionTool => t.type === "function"
       ) ?? [];
 
-    const hasTools = functionTools.length > 0;
+    const toolSettings = resolveActiveFunctionTools(
+      functionTools,
+      options.toolChoice
+    );
+
+    if (responseGrammar && toolSettings.grammar) {
+      throw new Error(
+        "Structured JSON response format cannot be combined with required toolChoice."
+      );
+    }
+
+    const grammar = responseGrammar ?? toolSettings.grammar;
+
+    const reasoningConfig = resolveCallReasoningConfig(
+      options,
+      this.config.reasoning,
+      grammar
+    );
 
     const messages = convertMessages(
       options.prompt,
-      hasTools && options.toolChoice?.type !== "none"
-        ? functionTools
-        : undefined,
+      toolSettings.tools,
       reasoningConfig,
-      this.toolCallContentCache
+      this.toolCallContentCache,
+      options.toolChoice
     );
 
     const generateOptions: GenerateOptions = {
@@ -1054,6 +1128,10 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       stopSequences: options.stopSequences,
       grammar,
     };
+    if (options.seed !== undefined) {
+      validateGenerationSeed(options.seed);
+      generateOptions.seed = options.seed;
+    }
     if (this.config.cache?.mode === "prefix") {
       generateOptions.promptCache = true;
     }
@@ -1093,7 +1171,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
             visibleText += delta;
 
             // When tools are provided, detect if output looks like a tool call
-            if (hasTools && options.toolChoice?.type !== "none") {
+            if (toolSettings.parseToolCalls) {
               if (!detectionComplete) {
                 // Buffer tokens during detection phase
                 tokenBuffer.push(delta);
@@ -1224,7 +1302,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
           // Check for tool calls if tools were provided
           let finishReason = convertFinishReason(result.finishReason);
 
-          if (hasTools && options.toolChoice?.type !== "none") {
+          if (toolSettings.parseToolCalls) {
             const toolCalls = parseToolCalls(visibleText);
 
             if (toolCalls && toolCalls.length > 0) {
@@ -1371,5 +1449,11 @@ function validateGenerationContextSize(
       `maxOutputTokens ${maxTokens.toLocaleString()} exceeds the loaded contextSize ` +
         `${contextSize.toLocaleString()}.`
     );
+  }
+}
+
+function validateGenerationSeed(seed: number): void {
+  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) {
+    throw new Error("seed must be an integer between 0 and 4294967295");
   }
 }

@@ -316,7 +316,41 @@ void LlamaModel::create_sampler(const GenerationParams &params) {
   llama_sampler_chain_add(sampler_, llama_sampler_init_top_k(params.top_k));
   llama_sampler_chain_add(sampler_, llama_sampler_init_top_p(params.top_p, 1));
   llama_sampler_chain_add(sampler_, llama_sampler_init_temp(params.temperature));
-  llama_sampler_chain_add(sampler_, llama_sampler_init_dist(42)); // Random seed
+  llama_sampler_chain_add(sampler_, llama_sampler_init_dist(params.seed));
+}
+
+static bool ends_with(const std::string &text, const std::string &suffix) {
+  return suffix.size() <= text.size() &&
+         text.compare(text.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+static size_t find_stop_sequence_suffix(const std::string &text,
+                                        const std::vector<std::string> &stop_sequences,
+                                        size_t &matched_stop_length) {
+  matched_stop_length = 0;
+  size_t keep_length = 0;
+
+  for (const auto &stop_seq : stop_sequences) {
+    if (stop_seq.empty()) {
+      continue;
+    }
+
+    if (ends_with(text, stop_seq)) {
+      matched_stop_length = stop_seq.size();
+      return stop_seq.size();
+    }
+
+    const size_t max_prefix_length = std::min(stop_seq.size() - 1, text.size());
+    for (size_t prefix_length = max_prefix_length; prefix_length > 0; prefix_length--) {
+      if (text.compare(text.size() - prefix_length, prefix_length, stop_seq, 0, prefix_length) ==
+          0) {
+        keep_length = std::max(keep_length, prefix_length);
+        break;
+      }
+    }
+  }
+
+  return keep_length;
 }
 
 std::vector<int32_t> LlamaModel::tokenize(const std::string &text, bool add_bos) {
@@ -751,6 +785,7 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
 
   // Generate tokens
   std::string generated_text;
+  std::string pending_text;
   int n_cur = n_past;
 
   for (int i = 0; i < params.max_tokens; i++) {
@@ -770,29 +805,45 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
     // Convert token to string
     std::string token_str = detokenize(new_token);
     generated_text += token_str;
+    pending_text += token_str;
     result.completion_tokens++;
 
-    // Call the callback with the new token
-    if (!callback(token_str)) {
-      if (!is_cancelled(result, cancellation)) {
-        result.finish_reason = "stop";
+    size_t matched_stop_length = 0;
+    const size_t keep_length =
+        find_stop_sequence_suffix(generated_text, params.stop_sequences, matched_stop_length);
+
+    if (matched_stop_length > 0) {
+      generated_text.resize(generated_text.size() - matched_stop_length);
+      if (pending_text.size() >= matched_stop_length) {
+        pending_text.resize(pending_text.size() - matched_stop_length);
+      } else {
+        pending_text.clear();
       }
+
+      if (!pending_text.empty() && !callback(pending_text)) {
+        if (!is_cancelled(result, cancellation)) {
+          result.finish_reason = "stop";
+        }
+        break;
+      }
+
+      pending_text.clear();
+      result.finish_reason = "stop";
       break;
     }
 
-    // Check for stop sequences
-    bool should_stop = false;
-    for (const auto &stop_seq : params.stop_sequences) {
-      if (generated_text.length() >= stop_seq.length()) {
-        if (generated_text.substr(generated_text.length() - stop_seq.length()) == stop_seq) {
-          should_stop = true;
+    if (pending_text.size() > keep_length) {
+      const size_t emit_length = pending_text.size() - keep_length;
+      std::string emit_text = pending_text.substr(0, emit_length);
+      pending_text.erase(0, emit_length);
+
+      if (!callback(emit_text)) {
+        if (!is_cancelled(result, cancellation)) {
           result.finish_reason = "stop";
-          break;
         }
+        break;
       }
     }
-    if (should_stop)
-      break;
 
     std::vector<int32_t> token = {new_token};
     cached_tokens_.push_back(new_token);
@@ -805,6 +856,12 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
       break;
     }
     n_cur++;
+  }
+
+  if (!pending_text.empty() && !is_cancelled(result, cancellation)) {
+    if (!callback(pending_text) && result.finish_reason == "error") {
+      result.finish_reason = "stop";
+    }
   }
 
   if (!params.prompt_cache) {
