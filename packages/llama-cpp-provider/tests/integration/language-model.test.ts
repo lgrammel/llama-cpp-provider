@@ -146,7 +146,7 @@ describe("LlamaCppLanguageModel Integration", () => {
         prompt: testMessages,
       });
 
-      expect(result.request!.body).toHaveProperty("maxTokens", 2048);
+      expect(result.request!.body).toHaveProperty("maxTokens", 256);
     });
 
     it("applies default temperature when not specified", async () => {
@@ -222,7 +222,10 @@ describe("LlamaCppLanguageModel Integration", () => {
       controller.abort();
 
       await expect(promise).rejects.toMatchObject({ name: "AbortError" });
-      expect(nativeBinding.cancelGeneration).toHaveBeenCalledWith(1);
+      const requestId = vi.mocked(nativeBinding.generate).mock.calls[0][1]
+        .requestId;
+      expect(requestId).toEqual(expect.any(String));
+      expect(nativeBinding.cancelGeneration).toHaveBeenCalledWith(1, requestId);
     });
 
     it("does not start native generation when already aborted", async () => {
@@ -695,7 +698,10 @@ describe("LlamaCppLanguageModel Integration", () => {
       await expect(reader.read()).rejects.toMatchObject({
         name: "AbortError",
       });
-      expect(nativeBinding.cancelGeneration).toHaveBeenCalledWith(1);
+      const requestId = vi.mocked(nativeBinding.generateStream).mock.calls[0][1]
+        .requestId;
+      expect(requestId).toEqual(expect.any(String));
+      expect(nativeBinding.cancelGeneration).toHaveBeenCalledWith(1, requestId);
 
       reader.releaseLock();
     });

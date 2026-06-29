@@ -50,6 +50,8 @@ export interface ImageInput {
 }
 
 export interface GenerateOptions {
+  /** Internal ID used to cancel one in-flight generation without affecting others. */
+  requestId?: string;
   messages: ChatMessage[];
   maxTokens?: number;
   temperature?: number;
@@ -99,7 +101,7 @@ interface NativeBinding {
     tokenCallback: (token: string) => void,
     doneCallback: (error: string | null, result: GenerateResult | null) => void
   ): void;
-  cancelGeneration(handle: number): boolean;
+  cancelGeneration(handle: number, requestId?: string): boolean;
   isModelLoaded(handle: number): boolean;
   // Embedding functions
   embed(
@@ -232,8 +234,8 @@ export function generate(
   });
 }
 
-export function cancelGeneration(handle: number): boolean {
-  return binding.cancelGeneration(handle);
+export function cancelGeneration(handle: number, requestId?: string): boolean {
+  return binding.cancelGeneration(handle, requestId);
 }
 
 export function generateStream(

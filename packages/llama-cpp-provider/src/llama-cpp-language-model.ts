@@ -105,6 +105,7 @@ interface ResolvedReasoningConfig {
 }
 
 const mediaMarker = "<__media__>";
+const DEFAULT_MAX_TOKENS = 256;
 
 function isImageMediaType(mediaType?: string): boolean {
   const normalized = mediaType?.toLowerCase();
@@ -982,10 +983,12 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       this.toolCallContentCache,
       options.toolChoice
     );
+    const requestId = crypto.randomUUID();
 
     const generateOptions: GenerateOptions = {
+      requestId,
       messages,
-      maxTokens: options.maxOutputTokens ?? 2048,
+      maxTokens: options.maxOutputTokens ?? DEFAULT_MAX_TOKENS,
       temperature: options.temperature ?? 0.7,
       topP: options.topP ?? 0.9,
       topK: options.topK ?? 40,
@@ -1006,6 +1009,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
 
     const result = await this.runWithAbortSignal(
       handle,
+      requestId,
       options.abortSignal,
       () => generate(handle, generateOptions)
     );
@@ -1118,10 +1122,12 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       this.toolCallContentCache,
       options.toolChoice
     );
+    const requestId = crypto.randomUUID();
 
     const generateOptions: GenerateOptions = {
+      requestId,
       messages,
-      maxTokens: options.maxOutputTokens ?? 2048,
+      maxTokens: options.maxOutputTokens ?? DEFAULT_MAX_TOKENS,
       temperature: options.temperature ?? 0.7,
       topP: options.topP ?? 0.9,
       topK: options.topK ?? 40,
@@ -1273,6 +1279,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
 
           const result = await this.runWithAbortSignal(
             handle,
+            requestId,
             options.abortSignal,
             () =>
               generateStream(handle, generateOptions, (token) => {
@@ -1359,6 +1366,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
 
   private async runWithAbortSignal<T>(
     handle: number,
+    requestId: string,
     signal: AbortSignal | undefined,
     run: () => Promise<T>
   ): Promise<T> {
@@ -1384,7 +1392,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       };
 
       abortListener = () => {
-        cancelGeneration(handle);
+        cancelGeneration(handle, requestId);
         settle(() => reject(createAbortError()));
       };
 
