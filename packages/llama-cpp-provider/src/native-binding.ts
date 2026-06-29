@@ -42,6 +42,9 @@ export interface ChatMessage {
   role: string;
   content: string;
   images?: ImageInput[];
+  toolCalls?: NativeToolCall[];
+  toolName?: string;
+  toolCallId?: string;
 }
 
 export interface ImageInput {
@@ -49,10 +52,25 @@ export interface ImageInput {
   mediaType?: string;
 }
 
+export interface NativeToolCall {
+  id?: string;
+  name: string;
+  arguments: string;
+}
+
+export interface ToolDefinition {
+  name: string;
+  description?: string;
+  parametersJson: string;
+}
+
 export interface GenerateOptions {
   /** Internal ID used to cancel one in-flight generation without affecting others. */
   requestId?: string;
   messages: ChatMessage[];
+  tools?: ToolDefinition[];
+  toolChoice?: "auto" | "required" | "none";
+  parallelToolCalls?: boolean;
   maxTokens?: number;
   temperature?: number;
   topP?: number;
@@ -73,6 +91,7 @@ export interface GenerateResult {
   cacheWriteTokens?: number;
   finishReason: "stop" | "length" | "error";
   errorMessage?: string;
+  toolCalls?: NativeToolCall[];
 }
 
 export interface EmbedOptions {

@@ -355,7 +355,7 @@ describe("Tool Calling", () => {
   });
 
   describe("convertMessages with tools", () => {
-    it("adds tool system prompt when tools are provided", () => {
+    it("does not inject a generic tool system prompt", () => {
       const messages: LanguageModelV4Message[] = [
         {
           role: "user",
@@ -363,21 +363,14 @@ describe("Tool Calling", () => {
         },
       ];
 
-      const tools: LanguageModelV4FunctionTool[] = [
+      const result = convertMessages(messages);
+
+      expect(result).toEqual([
         {
-          type: "function",
-          name: "get_weather",
-          description: "Get weather",
-          inputSchema: { type: "object", properties: {} },
+          role: "user",
+          content: "What's the weather?",
         },
-      ];
-
-      const result = convertMessages(messages, tools);
-
-      // Should have system message first with tool instructions
-      expect(result[0].role).toBe("system");
-      expect(result[0].content).toContain("get_weather");
-      expect(result[0].content).toContain('"name"');
+      ]);
     });
 
     it("does not add tool prompt when no tools provided", () => {
@@ -411,10 +404,14 @@ describe("Tool Calling", () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].role).toBe("assistant");
-      // Content should be JSON with tool_calls
-      const parsed = JSON.parse(result[0].content);
-      expect(parsed.tool_calls).toBeDefined();
-      expect(parsed.tool_calls[0].name).toBe("get_weather");
+      expect(result[0].content).toBe("");
+      expect(result[0].toolCalls).toEqual([
+        {
+          id: "call_123",
+          name: "get_weather",
+          arguments: '{"city":"Tokyo"}',
+        },
+      ]);
     });
 
     it("handles mixed text and tool call content", () => {
@@ -435,10 +432,18 @@ describe("Tool Calling", () => {
 
       const result = convertMessages(messages);
 
-      // When there are tool calls, the content becomes JSON
       expect(result).toHaveLength(1);
-      const parsed = JSON.parse(result[0].content);
-      expect(parsed.tool_calls).toBeDefined();
+      expect(result[0]).toEqual({
+        role: "assistant",
+        content: "Let me check the weather.",
+        toolCalls: [
+          {
+            id: "call_456",
+            name: "get_weather",
+            arguments: '{"city":"Paris"}',
+          },
+        ],
+      });
     });
 
     it("handles tool result messages", () => {
@@ -462,24 +467,15 @@ describe("Tool Calling", () => {
       const result = convertMessages(messages);
 
       expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("user");
-      expect(result[0].content).toContain("get_weather");
-      expect(result[0].content).toContain("temperature");
+      expect(result[0]).toEqual({
+        role: "tool",
+        content: '{"temperature":25,"condition":"sunny"}',
+        toolName: "get_weather",
+        toolCallId: "call_789",
+      });
     });
 
     it("handles complete tool calling conversation", () => {
-      const tools: LanguageModelV4FunctionTool[] = [
-        {
-          type: "function",
-          name: "get_weather",
-          description: "Get weather",
-          inputSchema: {
-            type: "object",
-            properties: { city: { type: "string" } },
-          },
-        },
-      ];
-
       const messages: LanguageModelV4Message[] = [
         {
           role: "user",
@@ -512,14 +508,27 @@ describe("Tool Calling", () => {
         },
       ];
 
-      const result = convertMessages(messages, tools);
+      const result = convertMessages(messages);
 
-      // Should have: system (tool instructions), user, assistant (tool call), user (tool result)
-      expect(result).toHaveLength(4);
-      expect(result[0].role).toBe("system");
-      expect(result[1].role).toBe("user");
-      expect(result[2].role).toBe("assistant");
-      expect(result[3].role).toBe("user");
+      expect(result).toHaveLength(3);
+      expect(result[0].role).toBe("user");
+      expect(result[1]).toEqual({
+        role: "assistant",
+        content: "",
+        toolCalls: [
+          {
+            id: "call_abc",
+            name: "get_weather",
+            arguments: '{"city":"Tokyo"}',
+          },
+        ],
+      });
+      expect(result[2]).toEqual({
+        role: "tool",
+        content: '{"temperature":22,"condition":"cloudy"}',
+        toolName: "get_weather",
+        toolCallId: "call_abc",
+      });
     });
   });
 });

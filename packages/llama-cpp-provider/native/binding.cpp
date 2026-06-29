@@ -54,6 +54,26 @@ bool CancelWorkers(std::unordered_map<int, std::vector<Worker *>> &workers_by_ha
   return cancelled;
 }
 
+static void SetToolCalls(Napi::Env env, Napi::Object result,
+                         const std::vector<llama_wrapper::ParsedToolCall> &tool_calls) {
+  if (tool_calls.empty()) {
+    return;
+  }
+
+  Napi::Array tool_calls_arr = Napi::Array::New(env, tool_calls.size());
+  for (size_t i = 0; i < tool_calls.size(); i++) {
+    const auto &tool_call = tool_calls[i];
+    Napi::Object tool_call_obj = Napi::Object::New(env);
+    if (!tool_call.id.empty()) {
+      tool_call_obj.Set("id", Napi::String::New(env, tool_call.id));
+    }
+    tool_call_obj.Set("name", Napi::String::New(env, tool_call.name));
+    tool_call_obj.Set("arguments", Napi::String::New(env, tool_call.arguments));
+    tool_calls_arr.Set(i, tool_call_obj);
+  }
+  result.Set("toolCalls", tool_calls_arr);
+}
+
 // ============================================================================
 // Async Workers
 // ============================================================================
@@ -173,6 +193,7 @@ public:
     result.Set("cacheReadTokens", Napi::Number::New(Env(), result_.cache_read_tokens));
     result.Set("cacheWriteTokens", Napi::Number::New(Env(), result_.cache_write_tokens));
     result.Set("finishReason", Napi::String::New(Env(), result_.finish_reason));
+    SetToolCalls(Env(), result, result_.tool_calls);
     if (!result_.error_message.empty()) {
       result.Set("errorMessage", Napi::String::New(Env(), result_.error_message));
     }
@@ -269,6 +290,7 @@ public:
     result.Set("cacheReadTokens", Napi::Number::New(Env(), result_.cache_read_tokens));
     result.Set("cacheWriteTokens", Napi::Number::New(Env(), result_.cache_write_tokens));
     result.Set("finishReason", Napi::String::New(Env(), result_.finish_reason));
+    SetToolCalls(Env(), result, result_.tool_calls);
     if (!result_.error_message.empty()) {
       result.Set("errorMessage", Napi::String::New(Env(), result_.error_message));
     }
@@ -464,6 +486,28 @@ std::vector<llama_wrapper::ChatMessage> ParseMessages(Napi::Array messages_arr) 
     llama_wrapper::ChatMessage msg;
     msg.role = msg_obj.Get("role").As<Napi::String>().Utf8Value();
     msg.content = msg_obj.Get("content").As<Napi::String>().Utf8Value();
+
+    if (msg_obj.Has("toolCalls") && msg_obj.Get("toolCalls").IsArray()) {
+      Napi::Array tool_calls_arr = msg_obj.Get("toolCalls").As<Napi::Array>();
+      for (uint32_t j = 0; j < tool_calls_arr.Length(); j++) {
+        Napi::Object tool_call_obj = tool_calls_arr.Get(j).As<Napi::Object>();
+        common_chat_tool_call tool_call;
+        if (tool_call_obj.Has("id") && tool_call_obj.Get("id").IsString()) {
+          tool_call.id = tool_call_obj.Get("id").As<Napi::String>().Utf8Value();
+        }
+        tool_call.name = tool_call_obj.Get("name").As<Napi::String>().Utf8Value();
+        tool_call.arguments = tool_call_obj.Get("arguments").As<Napi::String>().Utf8Value();
+        msg.tool_calls.push_back(std::move(tool_call));
+      }
+    }
+
+    if (msg_obj.Has("toolName") && msg_obj.Get("toolName").IsString()) {
+      msg.tool_name = msg_obj.Get("toolName").As<Napi::String>().Utf8Value();
+    }
+    if (msg_obj.Has("toolCallId") && msg_obj.Get("toolCallId").IsString()) {
+      msg.tool_call_id = msg_obj.Get("toolCallId").As<Napi::String>().Utf8Value();
+    }
+
     if (msg_obj.Has("images") && msg_obj.Get("images").IsArray()) {
       Napi::Array images_arr = msg_obj.Get("images").As<Napi::Array>();
       for (uint32_t j = 0; j < images_arr.Length(); j++) {
@@ -479,6 +523,30 @@ std::vector<llama_wrapper::ChatMessage> ParseMessages(Napi::Array messages_arr) 
     messages.push_back(msg);
   }
   return messages;
+}
+
+void ParseGenerationToolOptions(Napi::Object options, llama_wrapper::GenerationParams &params) {
+  if (options.Has("tools") && options.Get("tools").IsArray()) {
+    Napi::Array tools_arr = options.Get("tools").As<Napi::Array>();
+    for (uint32_t i = 0; i < tools_arr.Length(); i++) {
+      Napi::Object tool_obj = tools_arr.Get(i).As<Napi::Object>();
+      llama_wrapper::ToolDefinition tool;
+      tool.name = tool_obj.Get("name").As<Napi::String>().Utf8Value();
+      if (tool_obj.Has("description") && tool_obj.Get("description").IsString()) {
+        tool.description = tool_obj.Get("description").As<Napi::String>().Utf8Value();
+      }
+      tool.parameters = tool_obj.Get("parametersJson").As<Napi::String>().Utf8Value();
+      params.tools.push_back(std::move(tool));
+    }
+  }
+
+  if (options.Has("toolChoice") && options.Get("toolChoice").IsString()) {
+    params.tool_choice = options.Get("toolChoice").As<Napi::String>().Utf8Value();
+  }
+
+  if (options.Has("parallelToolCalls") && options.Get("parallelToolCalls").IsBoolean()) {
+    params.parallel_tool_calls = options.Get("parallelToolCalls").As<Napi::Boolean>().Value();
+  }
 }
 
 Napi::Value Generate(const Napi::CallbackInfo &info) {
@@ -526,6 +594,7 @@ Napi::Value Generate(const Napi::CallbackInfo &info) {
   if (options.Has("grammar") && options.Get("grammar").IsString()) {
     params.grammar = options.Get("grammar").As<Napi::String>().Utf8Value();
   }
+  ParseGenerationToolOptions(options, params);
   params.prompt_cache =
       options.Has("promptCache") ? options.Get("promptCache").As<Napi::Boolean>().Value() : false;
 
@@ -587,6 +656,7 @@ Napi::Value GenerateStream(const Napi::CallbackInfo &info) {
   if (options.Has("grammar") && options.Get("grammar").IsString()) {
     params.grammar = options.Get("grammar").As<Napi::String>().Utf8Value();
   }
+  ParseGenerationToolOptions(options, params);
   params.prompt_cache =
       options.Has("promptCache") ? options.Get("promptCache").As<Napi::Boolean>().Value() : false;
 

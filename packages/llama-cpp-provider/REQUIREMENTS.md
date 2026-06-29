@@ -57,7 +57,7 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 - Streams must begin with `stream-start`.
 - Text streams must emit `text-start`, `text-delta`, and `text-end` parts with a stable text ID.
 - Streams must end with a `finish` part containing finish reason and usage.
-- Streaming token callbacks must surface native tokens as text deltas unless valid tool-call detection suppresses them.
+- Streaming token callbacks must surface native tokens as text deltas unless active tool calling requires buffering for native tool-call parsing.
 - Streaming must not emit configured stop sequence text as text deltas.
 
 ## Message Conversion
@@ -65,8 +65,8 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 - System messages must remain system messages.
 - User text parts must be concatenated into the user message content.
 - Assistant text parts must be concatenated into assistant message content.
-- Assistant tool-call parts must be converted to a JSON `tool_calls` object.
-- Tool results must be converted to user messages that include the tool name, tool call ID, and result text.
+- Assistant tool-call parts must be converted to structured native `toolCalls` fields.
+- Tool results must be converted to `tool` role messages with the tool name, tool call ID, and result text.
 - Tool result JSON values must be stringified.
 - Tool result errors must be prefixed with `Error:`.
 
@@ -89,16 +89,19 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 
 ## Tool Calling
 
-- Function tools must add a system prompt that lists tool names, descriptions, and input schemas.
+- Function tools must be passed to the native llama.cpp common-chat template and parser path.
+- Function tools must not add a generic TypeScript-generated tool system prompt.
 - Tool prompting must be skipped when `toolChoice.type` is `"none"`.
-- `toolChoice.type: "required"` must constrain generation with a tool-call grammar that allows one of the provided function tools.
-- `toolChoice.type: "tool"` must constrain generation with a tool-call grammar for the selected function tool.
+- `toolChoice.type: "required"` must request llama.cpp required tool choice for the provided function tools.
+- `toolChoice.type: "tool"` must request llama.cpp required tool choice for the selected function tool.
 - `toolChoice.type: "tool"` must reject unknown function tool names before native generation.
-- Tool output parsing must accept a single JSON object, an array of JSON objects, or a legacy `tool_calls` wrapper.
+- `providerOptions["llama.cpp"].parallelToolCalls: true` must forward `parallelToolCalls: true` to native generation.
+- Native tool output parsing must use llama.cpp common-chat parser parameters produced by the applied chat template.
+- Tool output parsing must retain a compatibility fallback that accepts a single JSON object, an array of JSON objects, or a legacy `tool_calls` wrapper.
 - Parsed tool calls must produce AI SDK `tool-call` content with JSON-stringified arguments.
 - Parsed tool calls must set the unified finish reason to `tool-calls`.
 - Non-JSON or invalid tool-call output must be returned as normal text.
-- Streaming tool-call detection must suppress text deltas only when the generated visible text parses as a tool call.
+- Streaming with active tools must buffer generated text and emit parsed text/tool-call parts after native generation completes.
 
 ## Reasoning
 

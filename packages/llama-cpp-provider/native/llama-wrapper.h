@@ -1,6 +1,7 @@
 #ifndef LLAMA_WRAPPER_H
 #define LLAMA_WRAPPER_H
 
+#include "chat.h"
 #include "prompt-cache.h"
 #include <atomic>
 #include <cstdint>
@@ -35,6 +36,15 @@ struct ChatMessage {
   std::string role;
   std::string content;
   std::vector<std::vector<unsigned char>> images;
+  std::vector<common_chat_tool_call> tool_calls;
+  std::string tool_name;
+  std::string tool_call_id;
+};
+
+struct ToolDefinition {
+  std::string name;
+  std::string description;
+  std::string parameters;
 };
 
 struct ContextParams {
@@ -54,6 +64,15 @@ struct GenerationParams {
   std::vector<std::string> stop_sequences;
   std::string grammar; // GBNF grammar string for structured output
   bool prompt_cache = false;
+  std::vector<ToolDefinition> tools;
+  std::string tool_choice = "auto";
+  bool parallel_tool_calls = false;
+};
+
+struct ParsedToolCall {
+  std::string id;
+  std::string name;
+  std::string arguments;
 };
 
 struct GenerationResult {
@@ -64,6 +83,7 @@ struct GenerationResult {
   int cache_write_tokens;
   std::string finish_reason; // "stop", "length", or "error"
   std::string error_message;
+  std::vector<ParsedToolCall> tool_calls;
 };
 
 struct EmbeddingResult {
@@ -126,6 +146,7 @@ private:
   llama_context *ctx_ = nullptr;
   llama_sampler *sampler_ = nullptr;
   mtmd_context *mtmd_ctx_ = nullptr;
+  common_chat_templates_ptr chat_templates_;
   std::string model_path_;
   std::string mmproj_path_;
   std::string chat_template_;
@@ -164,6 +185,18 @@ private:
                       const std::vector<std::vector<unsigned char>> &images,
                       const GenerationParams &params, GenerationResult &result, int &n_past,
                       const CancellationToken &cancellation);
+  bool prepare_prompt(const std::vector<ChatMessage> &messages, const GenerationParams &params,
+                      GenerationResult &result, std::string &prompt,
+                      GenerationParams &effective_params, common_chat_parser_params &parser_params,
+                      bool &parse_tool_calls);
+  bool ensure_chat_templates(GenerationResult &result);
+  std::vector<common_chat_msg>
+  to_common_chat_messages(const std::vector<ChatMessage> &messages) const;
+  std::vector<common_chat_tool>
+  to_common_chat_tools(const std::vector<ToolDefinition> &tools) const;
+  void parse_generated_message(GenerationResult &result,
+                               const common_chat_parser_params &parser_params,
+                               bool parse_tool_calls) const;
 };
 
 } // namespace llama_wrapper

@@ -24,6 +24,8 @@ import {
   type LoadModelOptions,
   type GenerateOptions,
   type ChatMessage,
+  type NativeToolCall,
+  type ToolDefinition,
 } from "./native-binding.js";
 
 import type { JSONSchema7 } from "@ai-sdk/provider";
@@ -454,6 +456,35 @@ export interface ParsedToolCall {
   arguments: Record<string, unknown>;
 }
 
+function stringifyToolArguments(input: unknown): string {
+  return typeof input === "string" ? input : JSON.stringify(input);
+}
+
+function toolCallInput(toolCall: ParsedToolCall | NativeToolCall): string {
+  return typeof toolCall.arguments === "string"
+    ? toolCall.arguments
+    : JSON.stringify(toolCall.arguments);
+}
+
+function toNativeTools(tools: LanguageModelV4FunctionTool[]): ToolDefinition[] {
+  return tools.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    parametersJson: JSON.stringify(tool.inputSchema ?? {}),
+  }));
+}
+
+function resolveParallelToolCalls(
+  options: LanguageModelV4CallOptions
+): boolean {
+  const providerOptions = options.providerOptions as
+    | Record<string, Record<string, unknown> | undefined>
+    | undefined;
+  const llamaCppOptions =
+    providerOptions?.["llama.cpp"] ?? providerOptions?.llamaCpp;
+  return llamaCppOptions?.parallelToolCalls === true;
+}
+
 /**
  * Generate a GBNF grammar for tool calls based on the provided tool definitions.
  * This grammar constrains the model to produce valid JSON tool calls.
@@ -602,10 +633,6 @@ function generateToolCallId(): string {
   return `call_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
 }
 
-function toolCallCacheKey(toolCallIds: string[]): string {
-  return toolCallIds.join("\n");
-}
-
 /**
  * Build a system prompt that instructs the model to use tools.
  */
@@ -655,10 +682,7 @@ ${finalRule}`;
  */
 export function convertMessages(
   messages: LanguageModelV4Message[],
-  tools?: LanguageModelV4FunctionTool[],
-  reasoning?: Pick<ResolvedReasoningConfig, "promptPrefix">,
-  toolCallContentCache?: ReadonlyMap<string, string>,
-  toolChoice?: LanguageModelV4ToolChoice
+  reasoning?: Pick<ResolvedReasoningConfig, "promptPrefix">
 ): ChatMessage[] {
   const result: ChatMessage[] = [];
   let reasoningPromptAdded = false;
@@ -679,14 +703,6 @@ export function convertMessages(
 
     result.push(message);
   };
-
-  // Add tool system prompt if tools are provided
-  if (tools && tools.length > 0) {
-    addMessage({
-      role: "system",
-      content: buildToolSystemPrompt(tools, toolChoice),
-    });
-  }
 
   for (const message of messages) {
     switch (message.role) {
@@ -727,7 +743,7 @@ export function convertMessages(
         const toolCallParts: Array<{
           toolCallId: string;
           toolName: string;
-          input: unknown;
+          input: string;
         }> = [];
 
         for (const part of message.content) {
@@ -737,37 +753,29 @@ export function convertMessages(
             toolCallParts.push({
               toolCallId: part.toolCallId,
               toolName: part.toolName,
-              input: part.input,
+              input: stringifyToolArguments(part.input),
             });
           }
         }
 
-        // If there are tool calls, format them as JSON
-        if (toolCallParts.length > 0) {
-          const cachedToolCallContent = toolCallContentCache?.get(
-            toolCallCacheKey(toolCallParts.map((tc) => tc.toolCallId))
-          );
-
-          assistantContent =
-            cachedToolCallContent ??
-            JSON.stringify({
-              tool_calls: toolCallParts.map((tc) => ({
-                id: tc.toolCallId,
-                name: tc.toolName,
-                arguments: tc.input,
-              })),
-            });
-        }
-
-        if (assistantContent) {
+        if (assistantContent || toolCallParts.length > 0) {
           addMessage({
             role: "assistant",
             content: assistantContent,
+            ...(toolCallParts.length > 0
+              ? {
+                  toolCalls: toolCallParts.map((tc) => ({
+                    id: tc.toolCallId,
+                    name: tc.toolName,
+                    arguments: tc.input,
+                  })),
+                }
+              : {}),
           });
         }
         break;
       case "tool":
-        // Handle tool results - format them as user messages with the result
+        // Preserve tool results as native tool messages for llama.cpp common-chat.
         for (const part of message.content) {
           if (part.type === "tool-result") {
             const output = part.output;
@@ -799,8 +807,10 @@ export function convertMessages(
             }
 
             addMessage({
-              role: "user",
-              content: `Tool "${part.toolName}" (id: ${part.toolCallId}) returned:\n${resultText}`,
+              role: "tool",
+              content: resultText,
+              toolName: part.toolName,
+              toolCallId: part.toolCallId,
             });
           }
         }
@@ -824,10 +834,10 @@ function resolveActiveFunctionTools(
 ): {
   tools?: LanguageModelV4FunctionTool[];
   parseToolCalls: boolean;
-  grammar?: string;
+  toolChoice?: "auto" | "required" | "none";
 } {
   if (functionTools.length === 0 || toolChoice?.type === "none") {
-    return { parseToolCalls: false };
+    return { parseToolCalls: false, toolChoice: "none" };
   }
 
   if (toolChoice?.type === "tool") {
@@ -844,7 +854,7 @@ function resolveActiveFunctionTools(
     return {
       tools: [selectedTool],
       parseToolCalls: true,
-      grammar: generateToolCallGrammar([selectedTool]),
+      toolChoice: "required",
     };
   }
 
@@ -852,13 +862,14 @@ function resolveActiveFunctionTools(
     return {
       tools: functionTools,
       parseToolCalls: true,
-      grammar: generateToolCallGrammar(functionTools),
+      toolChoice: "required",
     };
   }
 
   return {
     tools: functionTools,
     parseToolCalls: true,
+    toolChoice: "auto",
   };
 }
 
@@ -877,8 +888,6 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   private readonly config: LlamaCppModelConfig;
   private initPromise: Promise<void> | null = null;
   private loadedContextSize: number | null = null;
-  private readonly toolCallContentCache = new Map<string, string>();
-
   constructor(config: LlamaCppModelConfig) {
     this.config = config;
     this.modelId = config.modelPath;
@@ -974,13 +983,13 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       options.toolChoice
     );
 
-    if (responseGrammar && toolSettings.grammar) {
+    if (responseGrammar && toolSettings.parseToolCalls) {
       throw new Error(
-        "Structured JSON response format cannot be combined with required toolChoice."
+        "Structured JSON response format cannot be combined with active tools."
       );
     }
 
-    const grammar = responseGrammar ?? toolSettings.grammar;
+    const grammar = responseGrammar;
 
     const reasoningConfig = resolveCallReasoningConfig(
       options,
@@ -988,18 +997,15 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       grammar
     );
 
-    const messages = convertMessages(
-      options.prompt,
-      toolSettings.tools,
-      reasoningConfig,
-      this.toolCallContentCache,
-      options.toolChoice
-    );
+    const messages = convertMessages(options.prompt, reasoningConfig);
     const requestId = crypto.randomUUID();
 
     const generateOptions: GenerateOptions = {
       requestId,
       messages,
+      tools: toolSettings.tools ? toNativeTools(toolSettings.tools) : undefined,
+      toolChoice: toolSettings.toolChoice,
+      parallelToolCalls: resolveParallelToolCalls(options),
       maxTokens: options.maxOutputTokens ?? DEFAULT_MAX_TOKENS,
       temperature: options.temperature ?? 0.7,
       topP: options.topP ?? 0.9,
@@ -1034,30 +1040,40 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
     const content: LanguageModelV4Content[] = [];
     let finishReason = convertFinishReason(result.finishReason);
 
-    // Try to parse tool calls if tools were provided
-    if (toolSettings.parseToolCalls) {
+    const nativeToolCalls = result.toolCalls;
+    if (nativeToolCalls && nativeToolCalls.length > 0) {
+      appendParsedContent(content, parsedContent);
+
+      for (const toolCall of nativeToolCalls) {
+        const toolCallId = toolCall.id || generateToolCallId();
+        content.push({
+          type: "tool-call",
+          toolCallId,
+          toolName: toolCall.name,
+          input: toolCallInput(toolCall),
+        });
+      }
+
+      finishReason = {
+        unified: "tool-calls",
+        raw: "tool-calls",
+      };
+    } else if (toolSettings.parseToolCalls) {
       const toolCalls = parseToolCalls(visibleText);
 
       if (toolCalls && toolCalls.length > 0) {
         appendParsedContent(content, parsedContent, { includeText: false });
 
         // Add tool calls to content
-        const toolCallIds: string[] = [];
         for (const toolCall of toolCalls) {
           const toolCallId = toolCall.id || generateToolCallId();
-          toolCallIds.push(toolCallId);
           content.push({
             type: "tool-call",
             toolCallId,
             toolName: toolCall.name,
-            input: JSON.stringify(toolCall.arguments),
+            input: toolCallInput(toolCall),
           });
         }
-        this.toolCallContentCache.set(
-          toolCallCacheKey(toolCallIds),
-          visibleText
-        );
-
         // Set finish reason to tool-calls
         finishReason = {
           unified: "tool-calls",
@@ -1113,13 +1129,13 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       options.toolChoice
     );
 
-    if (responseGrammar && toolSettings.grammar) {
+    if (responseGrammar && toolSettings.parseToolCalls) {
       throw new Error(
-        "Structured JSON response format cannot be combined with required toolChoice."
+        "Structured JSON response format cannot be combined with active tools."
       );
     }
 
-    const grammar = responseGrammar ?? toolSettings.grammar;
+    const grammar = responseGrammar;
 
     const reasoningConfig = resolveCallReasoningConfig(
       options,
@@ -1127,18 +1143,15 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       grammar
     );
 
-    const messages = convertMessages(
-      options.prompt,
-      toolSettings.tools,
-      reasoningConfig,
-      this.toolCallContentCache,
-      options.toolChoice
-    );
+    const messages = convertMessages(options.prompt, reasoningConfig);
     const requestId = crypto.randomUUID();
 
     const generateOptions: GenerateOptions = {
       requestId,
       messages,
+      tools: toolSettings.tools ? toNativeTools(toolSettings.tools) : undefined,
+      toolChoice: toolSettings.toolChoice,
+      parallelToolCalls: resolveParallelToolCalls(options),
       maxTokens: options.maxOutputTokens ?? DEFAULT_MAX_TOKENS,
       temperature: options.temperature ?? 0.7,
       topP: options.topP ?? 0.9,
@@ -1169,67 +1182,16 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
             warnings: [],
           });
 
-          // Collect the full text for tool call parsing
-          let fullText = "";
-          let visibleText = "";
-
-          // Track whether we've detected this is a tool call (to suppress text deltas)
-          let isToolCallMode = false;
-          let detectionComplete = false;
           let textStartEmitted = false;
           let reasoningId: string | undefined;
-          // Buffer tokens during detection phase when tools are present
-          let tokenBuffer: string[] = [];
 
           const emitTextDelta = (delta: string) => {
             if (delta.length === 0) {
               return;
             }
 
-            visibleText += delta;
-
-            // When tools are provided, detect if output looks like a tool call
             if (toolSettings.parseToolCalls) {
-              if (!detectionComplete) {
-                // Buffer tokens during detection phase
-                tokenBuffer.push(delta);
-
-                const trimmed = visibleText.trimStart();
-                // Check if it starts with JSON object/array (tool call pattern)
-                if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-                  isToolCallMode = true;
-                  detectionComplete = true;
-                  // Don't flush buffer - suppress all tokens for tool calls
-                  return;
-                } else if (trimmed.length > 0) {
-                  // First non-whitespace char is not JSON - it's regular text
-                  detectionComplete = true;
-                  // Flush buffered tokens as text deltas
-                  if (!textStartEmitted) {
-                    controller.enqueue({
-                      type: "text-start",
-                      id: textId,
-                    });
-                    textStartEmitted = true;
-                  }
-                  for (const bufferedToken of tokenBuffer) {
-                    controller.enqueue({
-                      type: "text-delta",
-                      id: textId,
-                      delta: bufferedToken,
-                    });
-                  }
-                  tokenBuffer = [];
-                  return;
-                }
-                // Still in detection phase (only whitespace so far)
-                return;
-              }
-
-              // If in tool call mode, don't emit text deltas
-              if (isToolCallMode) {
-                return;
-              }
+              return;
             }
 
             // Emit text start on first actual text delta
@@ -1299,8 +1261,9 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
                   return;
                 }
 
-                fullText += token;
-                if (reasoningProcessor) {
+                if (toolSettings.parseToolCalls) {
+                  return;
+                } else if (reasoningProcessor) {
                   reasoningProcessor.push(token);
                 } else {
                   emitTextDelta(token);
@@ -1314,33 +1277,46 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
           let finishReason = convertFinishReason(result.finishReason);
 
           if (toolSettings.parseToolCalls) {
-            const toolCalls = parseToolCalls(visibleText);
+            const parsedText = result.text;
+            const nativeToolCalls = result.toolCalls;
+            const fallbackToolCalls = nativeToolCalls?.length
+              ? undefined
+              : parseToolCalls(parsedText);
+            const toolCalls = nativeToolCalls?.length
+              ? nativeToolCalls
+              : fallbackToolCalls;
 
             if (toolCalls && toolCalls.length > 0) {
+              if (nativeToolCalls?.length && parsedText.length > 0) {
+                controller.enqueue({
+                  type: "text-start",
+                  id: textId,
+                });
+                controller.enqueue({
+                  type: "text-delta",
+                  id: textId,
+                  delta: parsedText,
+                });
+                textStartEmitted = true;
+              }
+
               // Emit tool call events
-              const toolCallIds: string[] = [];
               for (const toolCall of toolCalls) {
                 const toolCallId = toolCall.id || generateToolCallId();
-                toolCallIds.push(toolCallId);
 
                 controller.enqueue({
                   type: "tool-call",
                   toolCallId,
                   toolName: toolCall.name,
-                  input: JSON.stringify(toolCall.arguments),
+                  input: toolCallInput(toolCall),
                 });
               }
-              this.toolCallContentCache.set(
-                toolCallCacheKey(toolCallIds),
-                visibleText
-              );
-
               // Set finish reason to tool-calls
               finishReason = {
                 unified: "tool-calls",
                 raw: "tool-calls",
               };
-            } else if (isToolCallMode && visibleText.length > 0) {
+            } else if (parsedText.length > 0) {
               controller.enqueue({
                 type: "text-start",
                 id: textId,
@@ -1348,7 +1324,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
               controller.enqueue({
                 type: "text-delta",
                 id: textId,
-                delta: visibleText,
+                delta: parsedText,
               });
               textStartEmitted = true;
             }

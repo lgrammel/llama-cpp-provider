@@ -30,9 +30,10 @@ LlamaModel::~LlamaModel() {
 
 LlamaModel::LlamaModel(LlamaModel &&other) noexcept
     : model_(other.model_), ctx_(other.ctx_), sampler_(other.sampler_), mtmd_ctx_(other.mtmd_ctx_),
-      model_path_(std::move(other.model_path_)), mmproj_path_(std::move(other.mmproj_path_)),
-      chat_template_(std::move(other.chat_template_)), log_prompts_(other.log_prompts_),
-      n_batch_(other.n_batch_), cached_tokens_(std::move(other.cached_tokens_)) {
+      chat_templates_(std::move(other.chat_templates_)), model_path_(std::move(other.model_path_)),
+      mmproj_path_(std::move(other.mmproj_path_)), chat_template_(std::move(other.chat_template_)),
+      log_prompts_(other.log_prompts_), n_batch_(other.n_batch_),
+      cached_tokens_(std::move(other.cached_tokens_)) {
   other.model_ = nullptr;
   other.ctx_ = nullptr;
   other.sampler_ = nullptr;
@@ -47,6 +48,7 @@ LlamaModel &LlamaModel::operator=(LlamaModel &&other) noexcept {
     ctx_ = other.ctx_;
     sampler_ = other.sampler_;
     mtmd_ctx_ = other.mtmd_ctx_;
+    chat_templates_ = std::move(other.chat_templates_);
     model_path_ = std::move(other.model_path_);
     mmproj_path_ = std::move(other.mmproj_path_);
     chat_template_ = std::move(other.chat_template_);
@@ -120,6 +122,7 @@ void LlamaModel::unload() {
     llama_free(ctx_);
     ctx_ = nullptr;
   }
+  chat_templates_.reset();
   if (mtmd_ctx_) {
     mtmd_free(mtmd_ctx_);
     mtmd_ctx_ = nullptr;
@@ -292,6 +295,154 @@ std::string LlamaModel::apply_chat_template(const std::vector<ChatMessage> &mess
                             buffer.size());
 
   return std::string(buffer.data(), result_size);
+}
+
+bool LlamaModel::ensure_chat_templates(GenerationResult &result) {
+  if (chat_templates_) {
+    return true;
+  }
+
+  if (!model_) {
+    result.error_message = "Model is not loaded";
+    return false;
+  }
+
+  std::string template_override;
+  if (chat_template_ == "chatml") {
+    template_override = "chatml";
+  } else if (chat_template_ != "auto" && (chat_template_.find("{%") != std::string::npos ||
+                                          chat_template_.find("{{") != std::string::npos)) {
+    template_override = chat_template_;
+  }
+
+  try {
+    chat_templates_ = common_chat_templates_init(model_, template_override);
+    return true;
+  } catch (const std::exception &e) {
+    result.error_message =
+        std::string("Failed to initialize llama.cpp chat templates: ") + e.what();
+    return false;
+  }
+}
+
+std::vector<common_chat_msg>
+LlamaModel::to_common_chat_messages(const std::vector<ChatMessage> &messages) const {
+  std::vector<common_chat_msg> result;
+  result.reserve(messages.size());
+
+  for (const auto &message : messages) {
+    common_chat_msg msg;
+    msg.role = message.role;
+    msg.content = message.content;
+    msg.tool_calls = message.tool_calls;
+    msg.tool_name = message.tool_name;
+    msg.tool_call_id = message.tool_call_id;
+    result.push_back(std::move(msg));
+  }
+
+  return result;
+}
+
+std::vector<common_chat_tool>
+LlamaModel::to_common_chat_tools(const std::vector<ToolDefinition> &tools) const {
+  std::vector<common_chat_tool> result;
+  result.reserve(tools.size());
+
+  for (const auto &tool : tools) {
+    result.push_back({
+        /* .name = */ tool.name,
+        /* .description = */ tool.description,
+        /* .parameters = */ tool.parameters.empty() ? "{}" : tool.parameters,
+    });
+  }
+
+  return result;
+}
+
+static common_chat_tool_choice parse_tool_choice(const std::string &tool_choice) {
+  if (tool_choice == "required") {
+    return COMMON_CHAT_TOOL_CHOICE_REQUIRED;
+  }
+  if (tool_choice == "none") {
+    return COMMON_CHAT_TOOL_CHOICE_NONE;
+  }
+  return COMMON_CHAT_TOOL_CHOICE_AUTO;
+}
+
+bool LlamaModel::prepare_prompt(const std::vector<ChatMessage> &messages,
+                                const GenerationParams &params, GenerationResult &result,
+                                std::string &prompt, GenerationParams &effective_params,
+                                common_chat_parser_params &parser_params, bool &parse_tool_calls) {
+  effective_params = params;
+  parse_tool_calls = false;
+
+  if (params.tools.empty()) {
+    prompt = apply_chat_template(messages);
+    return !prompt.empty();
+  }
+
+  if (!params.grammar.empty()) {
+    result.error_message = "Cannot use custom grammar constraints with tools.";
+    return false;
+  }
+
+  if (!ensure_chat_templates(result)) {
+    return false;
+  }
+
+  common_chat_templates_inputs inputs;
+  inputs.messages = to_common_chat_messages(messages);
+  inputs.tools = to_common_chat_tools(params.tools);
+  inputs.tool_choice = parse_tool_choice(params.tool_choice);
+  inputs.parallel_tool_calls = params.parallel_tool_calls;
+  inputs.use_jinja = true;
+  inputs.add_generation_prompt = true;
+  inputs.reasoning_format = COMMON_REASONING_FORMAT_NONE;
+
+  try {
+    common_chat_params chat_params = common_chat_templates_apply(chat_templates_.get(), inputs);
+    prompt = chat_params.prompt;
+    effective_params.grammar = chat_params.grammar;
+    effective_params.stop_sequences.insert(effective_params.stop_sequences.end(),
+                                           chat_params.additional_stops.begin(),
+                                           chat_params.additional_stops.end());
+    parser_params = common_chat_parser_params(chat_params);
+    parser_params.parse_tool_calls = true;
+    parse_tool_calls = true;
+    return !prompt.empty();
+  } catch (const std::exception &e) {
+    result.error_message = std::string("Failed to apply llama.cpp chat template: ") + e.what();
+    return false;
+  }
+}
+
+void LlamaModel::parse_generated_message(GenerationResult &result,
+                                         const common_chat_parser_params &parser_params,
+                                         bool parse_tool_calls) const {
+  if (!parse_tool_calls || result.finish_reason == "error") {
+    return;
+  }
+
+  try {
+    common_chat_msg msg = common_chat_parse(result.text, false, parser_params);
+    if (msg.empty()) {
+      return;
+    }
+
+    result.text = msg.render_content();
+    result.tool_calls.clear();
+    result.tool_calls.reserve(msg.tool_calls.size());
+    for (const auto &tool_call : msg.tool_calls) {
+      result.tool_calls.push_back({
+          /* .id = */ tool_call.id,
+          /* .name = */ tool_call.name,
+          /* .arguments = */ tool_call.arguments,
+      });
+    }
+  } catch (const std::exception &) {
+    // If the native parser cannot parse a model response, keep the raw text so
+    // TypeScript can still fall back to the legacy JSON parser.
+  }
 }
 
 void LlamaModel::create_sampler(const GenerationParams &params) {
@@ -640,8 +791,19 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
     return result;
   }
 
-  // Apply chat template to get the prompt
-  std::string prompt = apply_chat_template(messages);
+  std::string prompt;
+  GenerationParams effective_params;
+  common_chat_parser_params parser_params;
+  bool parse_tool_calls = false;
+  if (!prepare_prompt(messages, params, result, prompt, effective_params, parser_params,
+                      parse_tool_calls)) {
+    if (result.error_message.empty()) {
+      result.error_message =
+          "Failed to apply chat template. Try setting chatTemplate explicitly, for example "
+          "'gemma', or use debug: true for llama.cpp template diagnostics.";
+    }
+    return result;
+  }
   if (prompt.empty()) {
     result.error_message =
         "Failed to apply chat template. Try setting chatTemplate explicitly, for example "
@@ -659,10 +821,10 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
   }
 
   // Create sampler
-  create_sampler(params);
+  create_sampler(effective_params);
 
   int n_past = 0;
-  if (!prefill_prompt(prompt, images, params, result, n_past, cancellation)) {
+  if (!prefill_prompt(prompt, images, effective_params, result, n_past, cancellation)) {
     return result;
   }
 
@@ -670,7 +832,7 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
   std::string generated_text;
   int n_cur = n_past;
 
-  for (int i = 0; i < params.max_tokens; i++) {
+  for (int i = 0; i < effective_params.max_tokens; i++) {
     if (is_cancelled(result, cancellation)) {
       break;
     }
@@ -691,7 +853,7 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
 
     // Check for stop sequences
     bool should_stop = false;
-    for (const auto &stop_seq : params.stop_sequences) {
+    for (const auto &stop_seq : effective_params.stop_sequences) {
       if (generated_text.length() >= stop_seq.length()) {
         if (generated_text.substr(generated_text.length() - stop_seq.length()) == stop_seq) {
           // Remove the stop sequence from output
@@ -718,7 +880,7 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
     n_cur++;
   }
 
-  if (!params.prompt_cache) {
+  if (!effective_params.prompt_cache) {
     cached_tokens_.clear();
   } else {
     sync_cached_tokens_to_text(prompt + generated_text);
@@ -726,13 +888,15 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
 
   if (result.error_message == "Generation aborted") {
     cached_tokens_.clear();
-  } else if (result.finish_reason == "error" && result.completion_tokens >= params.max_tokens) {
+  } else if (result.finish_reason == "error" &&
+             result.completion_tokens >= effective_params.max_tokens) {
     result.finish_reason = "length";
   } else if (result.finish_reason == "error" && result.error_message.empty()) {
     result.finish_reason = "stop";
   }
 
   result.text = generated_text;
+  parse_generated_message(result, parser_params, parse_tool_calls);
   return result;
 }
 
@@ -757,8 +921,19 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
     return result;
   }
 
-  // Apply chat template to get the prompt
-  std::string prompt = apply_chat_template(messages);
+  std::string prompt;
+  GenerationParams effective_params;
+  common_chat_parser_params parser_params;
+  bool parse_tool_calls = false;
+  if (!prepare_prompt(messages, params, result, prompt, effective_params, parser_params,
+                      parse_tool_calls)) {
+    if (result.error_message.empty()) {
+      result.error_message =
+          "Failed to apply chat template. Try setting chatTemplate explicitly, for example "
+          "'gemma', or use debug: true for llama.cpp template diagnostics.";
+    }
+    return result;
+  }
   if (prompt.empty()) {
     result.error_message =
         "Failed to apply chat template. Try setting chatTemplate explicitly, for example "
@@ -776,10 +951,10 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
   }
 
   // Create sampler
-  create_sampler(params);
+  create_sampler(effective_params);
 
   int n_past = 0;
-  if (!prefill_prompt(prompt, images, params, result, n_past, cancellation)) {
+  if (!prefill_prompt(prompt, images, effective_params, result, n_past, cancellation)) {
     return result;
   }
 
@@ -788,7 +963,7 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
   std::string pending_text;
   int n_cur = n_past;
 
-  for (int i = 0; i < params.max_tokens; i++) {
+  for (int i = 0; i < effective_params.max_tokens; i++) {
     if (is_cancelled(result, cancellation)) {
       break;
     }
@@ -809,8 +984,8 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
     result.completion_tokens++;
 
     size_t matched_stop_length = 0;
-    const size_t keep_length =
-        find_stop_sequence_suffix(generated_text, params.stop_sequences, matched_stop_length);
+    const size_t keep_length = find_stop_sequence_suffix(
+        generated_text, effective_params.stop_sequences, matched_stop_length);
 
     if (matched_stop_length > 0) {
       generated_text.resize(generated_text.size() - matched_stop_length);
@@ -864,7 +1039,7 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
     }
   }
 
-  if (!params.prompt_cache) {
+  if (!effective_params.prompt_cache) {
     cached_tokens_.clear();
   } else {
     sync_cached_tokens_to_text(prompt + generated_text);
@@ -872,13 +1047,15 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
 
   if (result.error_message == "Generation aborted") {
     cached_tokens_.clear();
-  } else if (result.finish_reason == "error" && result.completion_tokens >= params.max_tokens) {
+  } else if (result.finish_reason == "error" &&
+             result.completion_tokens >= effective_params.max_tokens) {
     result.finish_reason = "length";
   } else if (result.finish_reason == "error" && result.error_message.empty()) {
     result.finish_reason = "stop";
   }
 
   result.text = generated_text;
+  parse_generated_message(result, parser_params, parse_tool_calls);
   return result;
 }
 

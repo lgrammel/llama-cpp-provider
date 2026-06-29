@@ -1164,7 +1164,7 @@ describe("LlamaCppLanguageModel Integration", () => {
       expect(result.content[0].type).toBe("text");
     });
 
-    it("uses tool-call grammar when toolChoice is required", async () => {
+    it("passes native tools when toolChoice is required", async () => {
       vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
         text: '{"tool_calls":[{"id":"call_123","name":"get_weather","arguments":{"location":"Tokyo"}}]}',
         promptTokens: 100,
@@ -1181,7 +1181,16 @@ describe("LlamaCppLanguageModel Integration", () => {
       expect(nativeBinding.generate).toHaveBeenCalledWith(
         expect.any(Number),
         expect.objectContaining({
-          grammar: expect.stringContaining("tool-calls-kv"),
+          grammar: undefined,
+          toolChoice: "required",
+          tools: [
+            {
+              name: "get_weather",
+              description: "Get the current weather",
+              parametersJson:
+                '{"type":"object","properties":{"location":{"type":"string"}}}',
+            },
+          ],
         })
       );
       expect(result.content[0].type).toBe("tool-call");
@@ -1220,21 +1229,50 @@ describe("LlamaCppLanguageModel Integration", () => {
       expect(nativeBinding.generate).toHaveBeenCalledWith(
         expect.any(Number),
         expect.objectContaining({
-          grammar: expect.stringContaining('\\"search\\"'),
-          messages: expect.arrayContaining([
-            expect.objectContaining({
-              role: "system",
-              content: expect.stringContaining(
-                'You must call the "search" tool'
-              ),
-            }),
-          ]),
+          grammar: undefined,
+          toolChoice: "required",
+          tools: [
+            {
+              name: "search",
+              description: "Search",
+              parametersJson:
+                '{"type":"object","properties":{"query":{"type":"string"}}}',
+            },
+          ],
         })
       );
       const generateCall = vi.mocked(nativeBinding.generate).mock.calls.at(-1);
-      expect(generateCall?.[1].grammar).not.toContain('\\"get_weather\\"');
-      expect(generateCall?.[1].messages[0].content).not.toContain(
-        "get_weather"
+      expect(generateCall?.[1].messages).toEqual([
+        {
+          role: "user",
+          content: "What is the weather in Tokyo?",
+        },
+      ]);
+    });
+
+    it("forwards parallel tool calls from provider options", async () => {
+      vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
+        text: "No tool needed.",
+        promptTokens: 100,
+        completionTokens: 20,
+        finishReason: "stop",
+      });
+
+      await model.doGenerate({
+        prompt: testMessages,
+        tools: testTools,
+        providerOptions: {
+          "llama.cpp": {
+            parallelToolCalls: true,
+          },
+        },
+      });
+
+      expect(nativeBinding.generate).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          parallelToolCalls: true,
+        })
       );
     });
 
@@ -1312,12 +1350,26 @@ describe("LlamaCppLanguageModel Integration", () => {
         expect.any(Number),
         expect.objectContaining({
           promptCache: true,
-          messages: expect.arrayContaining([
+          messages: [
+            { role: "user", content: "What is the weather in Tokyo?" },
             {
               role: "assistant",
-              content: rawToolCall,
+              content: "",
+              toolCalls: [
+                {
+                  id: toolCall!.toolCallId,
+                  name: "get_weather",
+                  arguments: '{"location":"Tokyo"}',
+                },
+              ],
             },
-          ]),
+            {
+              role: "tool",
+              content: '{"location":"Tokyo","temperature":72}',
+              toolName: "get_weather",
+              toolCallId: toolCall!.toolCallId,
+            },
+          ],
         })
       );
 
@@ -1417,7 +1469,20 @@ describe("LlamaCppLanguageModel Integration", () => {
           messages: expect.arrayContaining([
             {
               role: "assistant",
-              content: rawToolCall,
+              content: "",
+              toolCalls: [
+                {
+                  id: toolCall!.toolCallId,
+                  name: "get_weather",
+                  arguments: '{"location":"Tokyo"}',
+                },
+              ],
+            },
+            {
+              role: "tool",
+              content: '{"location":"Tokyo","temperature":72}',
+              toolName: "get_weather",
+              toolCallId: toolCall!.toolCallId,
             },
           ]),
         })
@@ -1577,10 +1642,10 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       const parts = await collectStreamParts(stream);
 
-      // Should have text events
+      // Active tools buffer regular text until native parsing completes.
       const textDeltas = parts.filter((p) => p.type === "text-delta");
-      expect(textDeltas.length).toBe(4);
-      expect(textDeltas[0]?.delta).toBe("The");
+      expect(textDeltas).toHaveLength(1);
+      expect(textDeltas[0]?.delta).toBe("The weather is nice");
 
       // Should NOT have tool-call event
       const toolCallPart = parts.find((p) => p.type === "tool-call");
@@ -1719,7 +1784,20 @@ describe("LlamaCppLanguageModel Integration", () => {
           messages: expect.arrayContaining([
             {
               role: "assistant",
-              content: rawToolCall,
+              content: "",
+              toolCalls: [
+                {
+                  id: toolCall.toolCallId,
+                  name: "weather",
+                  arguments: '{"location":"Tokyo"}',
+                },
+              ],
+            },
+            {
+              role: "tool",
+              content: '{"location":"Tokyo","condition":"sunny"}',
+              toolName: "weather",
+              toolCallId: toolCall.toolCallId,
             },
           ]),
         })

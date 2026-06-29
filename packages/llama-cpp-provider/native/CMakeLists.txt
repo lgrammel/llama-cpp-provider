@@ -10,6 +10,7 @@ set(LLAMA_STATIC ON CACHE BOOL "Build llama.cpp as static library" FORCE)
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "Disable llama.cpp tests" FORCE)
 set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "Disable llama.cpp examples" FORCE)
 set(LLAMA_BUILD_SERVER OFF CACHE BOOL "Disable llama.cpp server" FORCE)
+set(LLAMA_BUILD_COMMON ON CACHE BOOL "Build llama.cpp common library" FORCE)
 
 # Avoid llama.cpp runtime CPU feature probes during package installation.
 # On Apple Silicon, the native SVE probe can hang during CMake configure.
@@ -63,6 +64,7 @@ include_directories(${NODE_ADDON_API_DIR})
 # Include llama.cpp headers
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/ggml/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/common)
 
 # Build the native addon
 add_library(${PROJECT_NAME} SHARED
@@ -80,6 +82,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 # Link against llama.cpp
 target_link_libraries(${PROJECT_NAME} PRIVATE
+    llama-common
     llama
     mtmd
     ggml
@@ -110,4 +113,3 @@ if(LLAMA_PROVIDER_BUILD_TESTS)
 
     add_test(NAME prompt_cache_test COMMAND prompt_cache_test)
 endif()
-

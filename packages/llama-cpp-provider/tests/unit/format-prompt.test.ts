@@ -191,7 +191,7 @@ describe("convertMessages", () => {
         { role: "user", content: [{ type: "text", text: "Hi" }] },
       ];
 
-      const result = convertMessages(messages, undefined, {
+      const result = convertMessages(messages, {
         promptPrefix: "<|think|>\n",
       });
 
@@ -206,7 +206,7 @@ describe("convertMessages", () => {
         { role: "user", content: [{ type: "text", text: "Hi" }] },
       ];
 
-      const result = convertMessages(messages, undefined, {
+      const result = convertMessages(messages, {
         promptPrefix: "<|think|>\n",
       });
 
@@ -218,7 +218,7 @@ describe("convertMessages", () => {
   });
 
   describe("tool messages", () => {
-    it("converts tool result message to user message format", () => {
+    it("converts tool result message to native tool message format", () => {
       const messages: LanguageModelV4Message[] = [
         {
           role: "tool",
@@ -238,12 +238,12 @@ describe("convertMessages", () => {
 
       const result = convertMessages(messages);
 
-      // Tool results are converted to user messages
       expect(result).toEqual([
         {
-          role: "user",
-          content:
-            'Tool "get_weather" (id: call_123) returned:\n{"temperature":72}',
+          role: "tool",
+          content: '{"temperature":72}',
+          toolName: "get_weather",
+          toolCallId: "call_123",
         },
       ]);
     });
@@ -270,9 +270,10 @@ describe("convertMessages", () => {
 
       expect(result).toEqual([
         {
-          role: "user",
-          content:
-            'Tool "search" (id: call_456) returned:\nSearch result: found 10 items',
+          role: "tool",
+          content: "Search result: found 10 items",
+          toolName: "search",
+          toolCallId: "call_456",
         },
       ]);
     });
@@ -299,9 +300,10 @@ describe("convertMessages", () => {
 
       expect(result).toEqual([
         {
-          role: "user",
-          content:
-            'Tool "api_call" (id: call_789) returned:\nError: Connection refused',
+          role: "tool",
+          content: "Error: Connection refused",
+          toolName: "api_call",
+          toolCallId: "call_789",
         },
       ]);
     });
@@ -328,9 +330,10 @@ describe("convertMessages", () => {
 
       expect(result).toEqual([
         {
-          role: "user",
-          content:
-            'Tool "dangerous_action" (id: call_abc) returned:\nExecution denied: User denied permission',
+          role: "tool",
+          content: "Execution denied: User denied permission",
+          toolName: "dangerous_action",
+          toolCallId: "call_abc",
         },
       ]);
     });
