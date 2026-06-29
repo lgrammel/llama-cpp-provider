@@ -30,10 +30,15 @@ vi.mock("../../src/native-binding.js", () => ({
     });
   }),
   isModelLoaded: vi.fn().mockReturnValue(true),
+  embed: vi.fn().mockResolvedValue({
+    embeddings: [new Float32Array([1, 2, 3])],
+    totalTokens: 2,
+  }),
 }));
 
 // Import after mocking
 import { LlamaCppLanguageModel } from "../../src/llama-cpp-language-model.js";
+import { LlamaCppEmbeddingModel } from "../../src/llama-cpp-embedding-model.js";
 import * as nativeBinding from "../../src/native-binding.js";
 import { gemma4Reasoning } from "../../src/gemma4.js";
 
@@ -276,6 +281,26 @@ describe("LlamaCppLanguageModel Integration", () => {
       );
     });
 
+    it("retries lazy model loading after a failed load", async () => {
+      vi.mocked(nativeBinding.loadModel).mockRejectedValueOnce(
+        new Error("first load failed")
+      );
+
+      await expect(
+        model.doGenerate({
+          prompt: testMessages,
+        })
+      ).rejects.toThrow("first load failed");
+
+      await expect(
+        model.doGenerate({
+          prompt: testMessages,
+        })
+      ).resolves.toHaveProperty("content");
+
+      expect(nativeBinding.loadModel).toHaveBeenCalledTimes(2);
+    });
+
     it("passes image inputs to native binding", async () => {
       const imageData = new Uint8Array([1, 2, 3]);
       await model.doGenerate({
@@ -308,7 +333,7 @@ describe("LlamaCppLanguageModel Integration", () => {
       );
     });
 
-    it("extracts default think-tag reasoning when reasoning is omitted", async () => {
+    it("returns think tags as text when reasoning is omitted", async () => {
       vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
         text: "<think>Think first.</think>Final answer.",
         promptTokens: 50,
@@ -322,13 +347,8 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       expect(result.content).toEqual([
         {
-          type: "reasoning",
-          text: "Think first.",
-          providerMetadata: undefined,
-        },
-        {
           type: "text",
-          text: "Final answer.",
+          text: "<think>Think first.</think>Final answer.",
           providerMetadata: undefined,
         },
       ]);
@@ -1500,6 +1520,39 @@ describe("LlamaCppLanguageModel Integration", () => {
       expect(finishPart?.finishReason?.unified).toBe("tool-calls");
     });
 
+    it("falls back to text when JSON-looking streamed output is not a tool call", async () => {
+      vi.mocked(nativeBinding.generateStream).mockImplementationOnce(
+        (handle, opts, onToken) => {
+          onToken("{");
+          onToken('"answer"');
+          onToken(': "Use a JSON object here."');
+          onToken("}");
+          return Promise.resolve({
+            text: '{"answer": "Use a JSON object here."}',
+            promptTokens: 50,
+            completionTokens: 8,
+            finishReason: "stop",
+          });
+        }
+      );
+
+      const { stream } = await model.doStream({
+        prompt: testMessages,
+        tools: testTools,
+      });
+
+      const parts = await collectStreamParts(stream);
+      const textDeltas = parts.filter((p) => p.type === "text-delta");
+      const toolCallPart = parts.find((p) => p.type === "tool-call");
+      const finishPart = parts.find((p) => p.type === "finish");
+
+      expect(textDeltas.map((p) => p.delta).join("")).toBe(
+        '{"answer": "Use a JSON object here."}'
+      );
+      expect(toolCallPart).toBeUndefined();
+      expect(finishPart?.finishReason?.unified).toBe("stop");
+    });
+
     it("streams text normally when output is not a tool call", async () => {
       vi.mocked(nativeBinding.generateStream).mockImplementationOnce(
         (handle, opts, onToken) => {
@@ -1674,6 +1727,40 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       await cachedModel.dispose();
     });
+  });
+});
+
+describe("LlamaCppEmbeddingModel Integration", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("retries lazy model loading after a failed load", async () => {
+    const model = new LlamaCppEmbeddingModel({
+      modelPath: "/test/embedding-model.gguf",
+    });
+    vi.mocked(nativeBinding.loadModel).mockRejectedValueOnce(
+      new Error("embedding load failed")
+    );
+
+    await expect(
+      model.doEmbed({
+        values: ["hello"],
+      })
+    ).rejects.toThrow("embedding load failed");
+
+    await expect(
+      model.doEmbed({
+        values: ["hello"],
+      })
+    ).resolves.toMatchObject({
+      embeddings: [[1, 2, 3]],
+      usage: { tokens: 2 },
+    });
+
+    expect(nativeBinding.loadModel).toHaveBeenCalledTimes(2);
+
+    await model.dispose();
   });
 });
 

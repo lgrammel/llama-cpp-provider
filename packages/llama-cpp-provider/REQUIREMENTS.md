@@ -57,7 +57,7 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 - Streams must begin with `stream-start`.
 - Text streams must emit `text-start`, `text-delta`, and `text-end` parts with a stable text ID.
 - Streams must end with a `finish` part containing finish reason and usage.
-- Streaming token callbacks must surface native tokens as text deltas unless tool-call detection suppresses them.
+- Streaming token callbacks must surface native tokens as text deltas unless valid tool-call detection suppresses them.
 - Streaming must not emit configured stop sequence text as text deltas.
 
 ## Message Conversion
@@ -98,13 +98,14 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 - Parsed tool calls must produce AI SDK `tool-call` content with JSON-stringified arguments.
 - Parsed tool calls must set the unified finish reason to `tool-calls`.
 - Non-JSON or invalid tool-call output must be returned as normal text.
-- Streaming tool-call detection must suppress text deltas when generated visible text starts with a JSON object or array.
+- Streaming tool-call detection must suppress text deltas only when the generated visible text parses as a tool call.
 
 ## Reasoning
 
 - Reasoning extraction must split generated text into AI SDK reasoning and text parts.
 - The default reasoning markers must be `<think>` and `</think>`.
 - Model-specific reasoning markers and prompt prefixes must be configurable.
+- Reasoning extraction must be disabled when no model reasoning config is set and the call does not request reasoning.
 - `reasoning: "none"` in a call must disable reasoning extraction.
 - When a reasoning prompt prefix is configured, it must be inserted into the first system message or prepended as a new system message.
 - Reasoning extraction must operate on tool-call visible text so hidden reasoning does not prevent tool-call parsing.

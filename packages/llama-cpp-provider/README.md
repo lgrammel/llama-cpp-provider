@@ -90,7 +90,7 @@ Important options:
 - `debug` enables verbose llama.cpp output.
 - `logPrompts` prints the final chat-template-rendered prompt sent to llama.cpp to stderr. It can include private user data and is intended for local debugging only.
 - `model.chatTemplate` defaults to `"auto"`, which uses the template embedded in the GGUF file. You can also pass a llama.cpp template name such as `"llama3"`, `"chatml"`, or `"gemma"`.
-- `model.reasoning` extracts thinking text into AI SDK reasoning parts.
+- `model.reasoning` extracts thinking text into AI SDK reasoning parts. When omitted, generated thinking markers are returned as normal text unless the AI SDK call requests reasoning.
 - `memorySafety` can reject or clamp context sizes that are estimated to exceed available memory when model memory metadata is provided.
 
 Standard AI SDK generation settings are supported by the language model, including `maxOutputTokens`, `temperature`, `topP`, `topK`, and `stopSequences`.

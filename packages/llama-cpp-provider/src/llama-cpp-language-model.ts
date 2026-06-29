@@ -216,7 +216,13 @@ function resolveCallReasoningConfig(
     return undefined;
   }
 
-  return resolveReasoningConfig(modelReasoning ?? {});
+  if (modelReasoning) {
+    return resolveReasoningConfig(modelReasoning);
+  }
+
+  return options.reasoning === undefined
+    ? undefined
+    : resolveReasoningConfig({});
 }
 
 export function splitReasoningContent(
@@ -891,7 +897,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       }
     }
 
-    this.initPromise = (async () => {
+    const initPromise = (async () => {
       const memorySafety = await checkModelMemorySafety({
         modelPath: this.config.modelPath,
         mmprojPath: this.config.mmprojPath,
@@ -916,9 +922,15 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       this.modelHandle = await loadModel(options);
       this.loadedContextSize = memorySafety.contextSize;
     })();
+    this.initPromise = initPromise;
 
-    await this.initPromise;
-    this.initPromise = null;
+    try {
+      await initPromise;
+    } finally {
+      if (this.initPromise === initPromise) {
+        this.initPromise = null;
+      }
+    }
 
     if (this.modelHandle === null) {
       throw new Error("Failed to load model");
@@ -1298,14 +1310,6 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
 
           reasoningProcessor?.flush();
 
-          // Emit text end if we started text
-          if (textStartEmitted) {
-            controller.enqueue({
-              type: "text-end",
-              id: textId,
-            });
-          }
-
           // Check for tool calls if tools were provided
           let finishReason = convertFinishReason(result.finishReason);
 
@@ -1336,7 +1340,26 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
                 unified: "tool-calls",
                 raw: "tool-calls",
               };
+            } else if (isToolCallMode && visibleText.length > 0) {
+              controller.enqueue({
+                type: "text-start",
+                id: textId,
+              });
+              controller.enqueue({
+                type: "text-delta",
+                id: textId,
+                delta: visibleText,
+              });
+              textStartEmitted = true;
             }
+          }
+
+          // Emit text end after tool-call fallback has had a chance to emit text.
+          if (textStartEmitted) {
+            controller.enqueue({
+              type: "text-end",
+              id: textId,
+            });
           }
 
           // Emit finish

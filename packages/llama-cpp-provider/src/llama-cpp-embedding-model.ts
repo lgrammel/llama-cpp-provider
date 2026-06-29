@@ -55,7 +55,7 @@ export class LlamaCppEmbeddingModel implements EmbeddingModelV4 {
       }
     }
 
-    this.initPromise = (async () => {
+    const initPromise = (async () => {
       const modelFileSizeBytes = await getFileSize(this.config.modelPath);
       const memorySafety = checkMemorySafety({
         model: this.config.model?.memory,
@@ -74,9 +74,15 @@ export class LlamaCppEmbeddingModel implements EmbeddingModelV4 {
 
       this.modelHandle = await loadModel(options);
     })();
+    this.initPromise = initPromise;
 
-    await this.initPromise;
-    this.initPromise = null;
+    try {
+      await initPromise;
+    } finally {
+      if (this.initPromise === initPromise) {
+        this.initPromise = null;
+      }
+    }
 
     if (this.modelHandle === null) {
       throw new Error("Failed to load embedding model");

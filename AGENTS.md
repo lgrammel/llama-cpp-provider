@@ -22,7 +22,7 @@ This file provides guidance for AI coding agents (Cursor, Copilot, Claude Code) 
 | Run unit tests | `pnpm test:unit` |
 | Run integration tests | `pnpm test:integration` |
 | Run E2E tests | `TEST_MODEL_PATH=./models/model.gguf pnpm test:e2e` |
-| Run example | `pnpm --filter @examples/basic generate-text` |
+| Run example | `pnpm --filter @examples/basic agent` |
 | Clean build artifacts | `pnpm clean` |
 
 ## Setup & Installation
@@ -122,11 +122,11 @@ If llama.cpp API changes break the native wrapper, update `packages/llama-cpp-pr
 ├── examples/
 │   └── basic/                  # Basic usage examples
 │       └── src/                # Example source files
-│           ├── generate-text.ts
-│           ├── stream-text.ts
-│           ├── generate-text-output.ts
-│           ├── chatbot.ts
-│           └── embed-many.ts
+│           ├── agent.ts
+│           ├── agent-tool-call.ts
+│           ├── agent-reasoning.ts
+│           ├── agent-image.ts
+│           └── prompt-cache.ts
 ├── pnpm-workspace.yaml         # Workspace configuration
 └── package.json                # Root package.json with workspace scripts
 ```
@@ -188,15 +188,15 @@ Examples are in the `examples/basic` workspace package:
 
 ```bash
 # Run examples using pnpm workspace filter
-pnpm --filter @examples/basic generate-text
-pnpm --filter @examples/basic stream-text
-pnpm --filter @examples/basic generate-text-output
-pnpm --filter @examples/basic chatbot
-pnpm --filter @examples/basic embed-many
+pnpm --filter @examples/basic agent
+pnpm --filter @examples/basic agent-tool-call
+pnpm --filter @examples/basic agent-reasoning
+pnpm --filter @examples/basic agent-image
+pnpm --filter @examples/basic prompt-cache
 
 # Or run directly from the examples/basic directory
 cd examples/basic
-pnpm generate-text
+pnpm agent
 ```
 
 ### Example Structure

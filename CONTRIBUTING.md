@@ -7,7 +7,7 @@ Thank you for your interest in contributing to @lgrammel/llama-cpp-provider!
 Before you begin, ensure you have the following installed:
 
 - **macOS** (Apple Silicon or Intel) - required, Windows/Linux not supported
-- **Node.js** >= 18.0.0
+- **Node.js** >= 22.0.0
 - **pnpm** >= 9.0.0
 - **CMake** >= 3.15
 - **Xcode Command Line Tools**
@@ -64,13 +64,13 @@ The `pnpm install` step automatically compiles llama.cpp and builds the native N
 
 ```bash
 # From the repository root
-pnpm --filter @examples/basic generate-text
-pnpm --filter @examples/basic stream-text
-pnpm --filter @examples/basic generate-text-tool-call
+pnpm --filter @examples/basic agent
+pnpm --filter @examples/basic agent-tool-call
+pnpm --filter @examples/basic agent-reasoning
 
 # Or from the examples directory
 cd examples/basic
-pnpm generate-text
+pnpm agent
 ```
 
 ## Making Changes
