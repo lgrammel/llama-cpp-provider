@@ -274,6 +274,7 @@ try {
 - **Imports**: Use `.js` extensions for local imports (e.g., `import { foo } from "./bar.js"`)
 - **Async/Await**: Preferred over raw Promises
 - **Error handling**: Use try/finally for model lifecycle management
+- **Requirements**: When behavior in `packages/llama-cpp-provider` changes, update `packages/llama-cpp-provider/REQUIREMENTS.md` in the same change if the documented requirements are affected. Keep it concise, accurate, and non-contradictory.
 
 ## Architecture & Internal Structure
 
@@ -298,7 +299,7 @@ try {
 
 ### Key Implementation Details
 
-- **Tool calling**: Implemented in `llama-cpp-language-model.ts` via GBNF grammar constraints. The `buildToolCallGrammar()` function generates grammar that forces valid JSON tool call output. Tool call detection happens in both `doGenerate()` and `doStream()`.
+- **Tool calling**: Implemented in `llama-cpp-language-model.ts` by adding a tool system prompt and parsing JSON tool-call output. Tool call detection happens in both `doGenerate()` and `doStream()`.
 
 - **Structured output**: Uses `json-schema-to-grammar.ts` to convert Zod schemas (via JSON Schema) to GBNF grammars. Supports primitives, objects, arrays, enums, and composition (`oneOf`, `anyOf`, `allOf`).
 
@@ -348,4 +349,4 @@ try {
 ## Limitations
 
 - macOS only (Windows/Linux not supported)
-- No image input support (text only)
+- Image inputs require a compatible multimodal model and `mmprojPath`
