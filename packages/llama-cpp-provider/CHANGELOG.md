@@ -1,5 +1,16 @@
 # @lgrammel/llama-cpp-provider
 
+## 0.3.0
+
+### Minor Changes
+
+- dbbeb2d: Align tool calling and generation defaults with llama.cpp server behavior.
+
+### Patch Changes
+
+- d3a4da0: Fix lazy-load retry handling, streamed tool-call fallback text, and reasoning extraction defaults.
+- e681e51: Add `logPrompts` to print the final llama.cpp rendered prompt for local debugging.
+
 ## 0.2.4
 
 ### Patch Changes
