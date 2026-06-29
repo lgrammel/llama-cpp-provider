@@ -6,7 +6,7 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 
 - The package must run on macOS only.
 - The package must support Apple Silicon and Intel Macs.
-- The package must require Node.js 18 or newer.
+- The package must require Node.js 22 or newer.
 - The package must be ESM-only.
 - Installation must fail on non-macOS platforms before native compilation.
 - Installation must require `git` so the pinned llama.cpp source can be fetched.

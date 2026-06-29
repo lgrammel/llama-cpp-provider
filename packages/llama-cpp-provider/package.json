@@ -58,10 +58,10 @@
   },
   "homepage": "https://github.com/lgrammel/llama-cpp-provider#readme",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "dependencies": {
-    "@ai-sdk/provider": "4.0.0-canary.16",
+    "@ai-sdk/provider": "4.0.0",
     "cmake-js": "^7.3.0",
     "node-addon-api": "^8.0.0"
   },

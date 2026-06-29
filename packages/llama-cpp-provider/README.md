@@ -11,7 +11,7 @@ The provider implements AI SDK language and embedding model interfaces for local
 ## Requirements
 
 - macOS on Apple Silicon or Intel.
-- Node.js >= 18.
+- Node.js >= 22.
 - CMake >= 3.15.
 - Xcode Command Line Tools.
 

@@ -33,8 +33,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/llama-cpp-provider
       ai:
-        specifier: 7.0.0-canary.130
-        version: 7.0.0-canary.130(zod@4.3.5)
+        specifier: 7.0.4
+        version: 7.0.4(zod@4.3.5)
       zod:
         specifier: ^4.3.5
         version: 4.3.5
@@ -52,8 +52,8 @@ importers:
   packages/llama-cpp-provider:
     dependencies:
       '@ai-sdk/provider':
-        specifier: 4.0.0-canary.16
-        version: 4.0.0-canary.16
+        specifier: 4.0.0
+        version: 4.0.0
       cmake-js:
         specifier: ^7.3.0
         version: 7.4.0
@@ -80,8 +80,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/llama-cpp-provider
       ai:
-        specifier: 7.0.0-canary.130
-        version: 7.0.0-canary.130(zod@4.3.5)
+        specifier: 7.0.4
+        version: 7.0.4(zod@4.3.5)
       zod:
         specifier: ^4.3.5
         version: 4.3.5
@@ -98,21 +98,21 @@ importers:
 
 packages:
 
-  '@ai-sdk/gateway@4.0.0-canary.76':
-    resolution: {integrity: sha512-/39J2bTr6J7uKK4Iu0qWxrrpjAFNTN0wVkJMHpBG//oDS4tsWQyN+c3H+hQ/sQkhR0RFd4uzEbOdzluIrD9CQA==}
-    engines: {node: '>=18'}
+  '@ai-sdk/gateway@4.0.4':
+    resolution: {integrity: sha512-xO0e9duft/uZlnDaIeBZmzTMjfdEz1kkDzWnhQNkJZZljsKWVi6IREZW9nAa+Dx6jYJssyxSUggaFYBAV1WZpw==}
+    engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider-utils@5.0.0-canary.37':
-    resolution: {integrity: sha512-wkFRxNKbpFNStSIZyDEoWlbcksq4F3oGxudBBQhf8PrNLqIg6PWfkogaUvENmlLQmDI995QET6x9rBCGq4fVrg==}
-    engines: {node: '>=18'}
+  '@ai-sdk/provider-utils@5.0.1':
+    resolution: {integrity: sha512-p9Ra+dN4jjHrssXvklNf4nFvWbj1KePMfUOs7nue0NuoIMbYFBULhX4Vu0+6DWLnw3+UsLL9+RCKLtzzU43Qpg==}
+    engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider@4.0.0-canary.16':
-    resolution: {integrity: sha512-IJKj5cOfRNbc1+rBIdyqFbsd4tjWY3wrM3y2D2YdZCHLi6qpS2yLN0P+ajEPCEnto6iZFWQHk28iRMwgvFSJRg==}
-    engines: {node: '>=18'}
+  '@ai-sdk/provider@4.0.0':
+    resolution: {integrity: sha512-fr9Gs89prDWiuox/T+kCA+i2cJkHpxU5S+tr4megjTzRC27ZsvFhwjU/+XrqqMbvBUlfmXxTOYWy8ng45dsjIg==}
+    engines: {node: '>=22'}
 
   '@babel/helper-string-parser@7.27.1':
     resolution: {integrity: sha512-qMlSxKbpRlAridDExk92nSobyDdpPijUq2DW6oDnUqd0iOGxmQjyqhMIihI9+zv4LPyZdRje2cavWPbCbWm3eA==}
@@ -812,9 +812,9 @@ packages:
   '@workflow/serde@4.1.0':
     resolution: {integrity: sha512-pav4F2BoirECWR7Nf1TKt+2eETcBj7jj4cBefQ8VXQCA6NPkaKeLfj/zMgi+3zYV5ZIBT4GuUiphsj0/b9hPQQ==}
 
-  ai@7.0.0-canary.130:
-    resolution: {integrity: sha512-6jPifjBEyC5Iz6G2zpNCSpNS73pSxFWzH2oVgp7BaTQFG7T+kZC/RXsoggb8j74ra5kYTOUPr5jCt/bZGZv8BA==}
-    engines: {node: '>=18'}
+  ai@7.0.4:
+    resolution: {integrity: sha512-mZub080RWRxpWg8OY56KVnI3AoMVniccSWG+dwVb3nH81+GiNMDYBIdP41RLUivLpmU49pB7ssD7tvfIUaSaCA==}
+    engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
@@ -1815,22 +1815,22 @@ packages:
 
 snapshots:
 
-  '@ai-sdk/gateway@4.0.0-canary.76(zod@4.3.5)':
+  '@ai-sdk/gateway@4.0.4(zod@4.3.5)':
     dependencies:
-      '@ai-sdk/provider': 4.0.0-canary.16
-      '@ai-sdk/provider-utils': 5.0.0-canary.37(zod@4.3.5)
+      '@ai-sdk/provider': 4.0.0
+      '@ai-sdk/provider-utils': 5.0.1(zod@4.3.5)
       '@vercel/oidc': 3.2.0
       zod: 4.3.5
 
-  '@ai-sdk/provider-utils@5.0.0-canary.37(zod@4.3.5)':
+  '@ai-sdk/provider-utils@5.0.1(zod@4.3.5)':
     dependencies:
-      '@ai-sdk/provider': 4.0.0-canary.16
+      '@ai-sdk/provider': 4.0.0
       '@standard-schema/spec': 1.1.0
       '@workflow/serde': 4.1.0
       eventsource-parser: 3.0.8
       zod: 4.3.5
 
-  '@ai-sdk/provider@4.0.0-canary.16':
+  '@ai-sdk/provider@4.0.0':
     dependencies:
       json-schema: 0.4.0
 
@@ -2090,7 +2090,7 @@ snapshots:
 
   '@lgrammel/agent-tui@0.2.0(typescript@5.9.3)(zod@4.3.5)':
     dependencies:
-      ai: 7.0.0-canary.130(zod@4.3.5)
+      ai: 7.0.4(zod@4.3.5)
       typescript: 5.9.3
     transitivePeerDependencies:
       - zod
@@ -2389,11 +2389,11 @@ snapshots:
 
   '@workflow/serde@4.1.0': {}
 
-  ai@7.0.0-canary.130(zod@4.3.5):
+  ai@7.0.4(zod@4.3.5):
     dependencies:
-      '@ai-sdk/gateway': 4.0.0-canary.76(zod@4.3.5)
-      '@ai-sdk/provider': 4.0.0-canary.16
-      '@ai-sdk/provider-utils': 5.0.0-canary.37(zod@4.3.5)
+      '@ai-sdk/gateway': 4.0.4(zod@4.3.5)
+      '@ai-sdk/provider': 4.0.0
+      '@ai-sdk/provider-utils': 5.0.1(zod@4.3.5)
       zod: 4.3.5
 
   ansi-colors@4.1.3: {}

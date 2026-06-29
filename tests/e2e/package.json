@@ -8,8 +8,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "ai": "7.0.0-canary.130",
     "@lgrammel/llama-cpp-provider": "workspace:*",
+    "ai": "7.0.4",
     "zod": "^4.3.5"
   },
   "devDependencies": {

@@ -30,7 +30,7 @@ This file provides guidance for AI coding agents (Cursor, Copilot, Claude Code) 
 ### Prerequisites
 
 - **macOS** (Apple Silicon or Intel) - required
-- **Node.js** >= 18.0.0
+- **Node.js** >= 22.0.0
 - **pnpm** >= 9.0.0
 - **CMake** >= 3.15
 - **Xcode Command Line Tools**
