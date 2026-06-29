@@ -202,21 +202,20 @@ describe("LlamaCppLanguageModel Integration", () => {
     it("rejects and cancels native generation when aborted", async () => {
       const controller = new AbortController();
       let markGenerationStarted!: () => void;
+      let resolveGeneration!: (value: {
+        text: string;
+        promptTokens: number;
+        completionTokens: number;
+        finishReason: "stop";
+      }) => void;
       const generationStarted = new Promise<void>((resolve) => {
         markGenerationStarted = resolve;
       });
       vi.mocked(nativeBinding.generate).mockImplementationOnce(
         () =>
           new Promise((resolve) => {
+            resolveGeneration = resolve;
             markGenerationStarted();
-            setTimeout(() => {
-              resolve({
-                text: "Late response",
-                promptTokens: 50,
-                completionTokens: 10,
-                finishReason: "stop",
-              });
-            }, 50);
           })
       );
 
@@ -224,15 +223,74 @@ describe("LlamaCppLanguageModel Integration", () => {
         prompt: testMessages,
         abortSignal: controller.signal,
       });
+      let settled = false;
+      promise.catch(() => {
+        settled = true;
+      });
 
       await generationStarted;
       controller.abort();
+      await Promise.resolve();
 
-      await expect(promise).rejects.toMatchObject({ name: "AbortError" });
+      expect(settled).toBe(false);
       const requestId = vi.mocked(nativeBinding.generate).mock.calls[0][1]
         .requestId;
       expect(requestId).toEqual(expect.any(String));
       expect(nativeBinding.cancelGeneration).toHaveBeenCalledWith(1, requestId);
+
+      resolveGeneration({
+        text: "Late response",
+        promptTokens: 50,
+        completionTokens: 10,
+        finishReason: "stop",
+      });
+
+      await expect(promise).rejects.toMatchObject({ name: "AbortError" });
+    });
+
+    it("waits for active generation before unloading during dispose", async () => {
+      let markGenerationStarted!: () => void;
+      let resolveGeneration!: (value: {
+        text: string;
+        promptTokens: number;
+        completionTokens: number;
+        finishReason: "stop";
+      }) => void;
+      const generationStarted = new Promise<void>((resolve) => {
+        markGenerationStarted = resolve;
+      });
+      vi.mocked(nativeBinding.generate).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveGeneration = resolve;
+            markGenerationStarted();
+          })
+      );
+
+      const generationPromise = model.doGenerate({
+        prompt: testMessages,
+      });
+
+      await generationStarted;
+      const disposePromise = model.dispose();
+
+      expect(nativeBinding.cancelGeneration).toHaveBeenCalledWith(
+        1,
+        vi.mocked(nativeBinding.generate).mock.calls[0][1].requestId
+      );
+      expect(nativeBinding.unloadModel).not.toHaveBeenCalled();
+
+      resolveGeneration({
+        text: "Late response",
+        promptTokens: 50,
+        completionTokens: 10,
+        finishReason: "stop",
+      });
+
+      await disposePromise;
+      await generationPromise;
+
+      expect(nativeBinding.unloadModel).toHaveBeenCalledWith(1);
     });
 
     it("does not start native generation when already aborted", async () => {
@@ -667,6 +725,47 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       expect(finishPart?.usage?.inputTokens.cacheRead).toBe(20);
       expect(finishPart?.usage?.inputTokens.cacheWrite).toBe(10);
+    });
+
+    it("cancels native generation when stream reader is cancelled", async () => {
+      let markGenerationStarted!: () => void;
+      let resolveGeneration!: (value: {
+        text: string;
+        promptTokens: number;
+        completionTokens: number;
+        finishReason: "stop";
+      }) => void;
+      const generationStarted = new Promise<void>((resolve) => {
+        markGenerationStarted = resolve;
+      });
+      vi.mocked(nativeBinding.generateStream).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveGeneration = resolve;
+            markGenerationStarted();
+          })
+      );
+
+      const { stream } = await model.doStream({
+        prompt: testMessages,
+      });
+
+      const reader = stream.getReader();
+      await reader.read();
+      await generationStarted;
+      await reader.cancel();
+
+      const requestId = vi.mocked(nativeBinding.generateStream).mock.calls[0][1]
+        .requestId;
+      expect(requestId).toEqual(expect.any(String));
+      expect(nativeBinding.cancelGeneration).toHaveBeenCalledWith(1, requestId);
+
+      resolveGeneration({
+        text: "",
+        promptTokens: 30,
+        completionTokens: 0,
+        finishReason: "stop",
+      });
     });
 
     it("all text-delta parts share the same id", async () => {

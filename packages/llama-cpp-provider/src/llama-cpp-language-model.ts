@@ -891,6 +891,14 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   private readonly config: LlamaCppModelConfig;
   private initPromise: Promise<void> | null = null;
   private loadedContextSize: number | null = null;
+  private readonly activeRequests = new Map<
+    string,
+    {
+      handle: number;
+      requestId: string;
+      settled: Promise<void>;
+    }
+  >();
   constructor(config: LlamaCppModelConfig) {
     this.config = config;
     this.modelId = config.modelPath;
@@ -952,8 +960,23 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   }
 
   async dispose(): Promise<void> {
-    if (this.modelHandle !== null) {
-      unloadModel(this.modelHandle);
+    const handle = this.modelHandle;
+    if (handle !== null) {
+      const activeRequests = [...this.activeRequests.values()].filter(
+        (request) => request.handle === handle
+      );
+
+      for (const request of activeRequests) {
+        cancelGeneration(handle, request.requestId);
+      }
+
+      await Promise.all(activeRequests.map((request) => request.settled));
+
+      if (this.modelHandle !== handle) {
+        return;
+      }
+
+      unloadModel(handle);
       this.modelHandle = null;
       this.loadedContextSize = null;
     }
@@ -1176,6 +1199,8 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
 
     const textId = crypto.randomUUID();
 
+    let streamCancelled = false;
+
     const stream = new ReadableStream<LanguageModelV4StreamPart>({
       start: async (controller) => {
         try {
@@ -1260,7 +1285,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
             options.abortSignal,
             () =>
               generateStream(handle, generateOptions, (token) => {
-                if (options.abortSignal?.aborted) {
+                if (options.abortSignal?.aborted || streamCancelled) {
                   return;
                 }
 
@@ -1273,6 +1298,10 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
                 }
               })
           );
+
+          if (streamCancelled) {
+            return;
+          }
 
           reasoningProcessor?.flush();
 
@@ -1353,8 +1382,14 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
 
           controller.close();
         } catch (error) {
-          controller.error(error);
+          if (!streamCancelled) {
+            controller.error(error);
+          }
         }
+      },
+      cancel: () => {
+        streamCancelled = true;
+        cancelGeneration(handle, requestId);
       },
     });
 
@@ -1374,42 +1409,53 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   ): Promise<T> {
     throwIfAborted(signal);
 
-    if (!signal) {
-      return run();
-    }
+    let abortRequested = false;
+    let abortListener: (() => void) | undefined;
 
-    return new Promise<T>((resolve, reject) => {
-      let settled = false;
-      let abortListener: (() => void) | undefined;
+    const runPromise = Promise.resolve().then(run);
+    this.activeRequests.set(requestId, {
+      handle,
+      requestId,
+      settled: runPromise.then(
+        () => undefined,
+        () => undefined
+      ),
+    });
 
-      const settle = (callback: () => void) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        if (abortListener) {
-          signal.removeEventListener("abort", abortListener);
-        }
-        callback();
-      };
+    const cleanup = () => {
+      this.activeRequests.delete(requestId);
+      if (signal && abortListener) {
+        signal.removeEventListener("abort", abortListener);
+      }
+    };
 
+    if (signal) {
       abortListener = () => {
+        abortRequested = true;
         cancelGeneration(handle, requestId);
-        settle(() => reject(createAbortError()));
       };
 
       signal.addEventListener("abort", abortListener, { once: true });
 
       if (signal.aborted) {
         abortListener();
-        return;
       }
+    }
 
-      run().then(
-        (result) => settle(() => resolve(result)),
-        (error: unknown) => settle(() => reject(error))
-      );
-    });
+    try {
+      const result = await runPromise;
+      if (abortRequested) {
+        throw createAbortError();
+      }
+      return result;
+    } catch (error) {
+      if (abortRequested) {
+        throw createAbortError();
+      }
+      throw error;
+    } finally {
+      cleanup();
+    }
   }
 }
 

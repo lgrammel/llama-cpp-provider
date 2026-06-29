@@ -103,6 +103,8 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 - Parsed tool calls must set the unified finish reason to `tool-calls`.
 - Non-JSON or invalid tool-call output must be returned as normal text.
 - Streaming with active tools must buffer generated text and emit parsed text/tool-call parts after native generation completes.
+- Cancelling a streamed response must cancel the corresponding native generation request.
+- `dispose()` must cancel active generation requests for the loaded model and wait for them to settle before unloading the native model handle.
 
 ## Reasoning
 
