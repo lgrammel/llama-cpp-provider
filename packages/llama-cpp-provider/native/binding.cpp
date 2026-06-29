@@ -574,11 +574,11 @@ Napi::Value Generate(const Napi::CallbackInfo &info) {
 
   llama_wrapper::GenerationParams params;
   params.max_tokens =
-      options.Has("maxTokens") ? options.Get("maxTokens").As<Napi::Number>().Int32Value() : 256;
+      options.Has("maxTokens") ? options.Get("maxTokens").As<Napi::Number>().Int32Value() : -1;
   params.temperature = options.Has("temperature")
                            ? options.Get("temperature").As<Napi::Number>().FloatValue()
-                           : 0.7f;
-  params.top_p = options.Has("topP") ? options.Get("topP").As<Napi::Number>().FloatValue() : 0.9f;
+                           : 0.8f;
+  params.top_p = options.Has("topP") ? options.Get("topP").As<Napi::Number>().FloatValue() : 0.95f;
   params.top_k = options.Has("topK") ? options.Get("topK").As<Napi::Number>().Int32Value() : 40;
   params.seed = options.Has("seed") && options.Get("seed").IsNumber()
                     ? options.Get("seed").As<Napi::Number>().Uint32Value()
@@ -636,11 +636,11 @@ Napi::Value GenerateStream(const Napi::CallbackInfo &info) {
 
   llama_wrapper::GenerationParams params;
   params.max_tokens =
-      options.Has("maxTokens") ? options.Get("maxTokens").As<Napi::Number>().Int32Value() : 256;
+      options.Has("maxTokens") ? options.Get("maxTokens").As<Napi::Number>().Int32Value() : -1;
   params.temperature = options.Has("temperature")
                            ? options.Get("temperature").As<Napi::Number>().FloatValue()
-                           : 0.7f;
-  params.top_p = options.Has("topP") ? options.Get("topP").As<Napi::Number>().FloatValue() : 0.9f;
+                           : 0.8f;
+  params.top_p = options.Has("topP") ? options.Get("topP").As<Napi::Number>().FloatValue() : 0.95f;
   params.top_k = options.Has("topK") ? options.Get("topK").As<Napi::Number>().Int32Value() : 40;
   params.seed = options.Has("seed") && options.Get("seed").IsNumber()
                     ? options.Get("seed").As<Napi::Number>().Uint32Value()

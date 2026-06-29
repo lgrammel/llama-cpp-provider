@@ -151,15 +151,17 @@ describe("LlamaCppLanguageModel Integration", () => {
         prompt: testMessages,
       });
 
-      expect(result.request!.body).toHaveProperty("maxTokens", 256);
+      expect(result.request!.body).toHaveProperty("maxTokens", -1);
     });
 
-    it("applies default temperature when not specified", async () => {
+    it("applies server sampling defaults when not specified", async () => {
       const result = await model.doGenerate({
         prompt: testMessages,
       });
 
-      expect(result.request!.body).toHaveProperty("temperature", 0.7);
+      expect(result.request!.body).toHaveProperty("temperature", 0.8);
+      expect(result.request!.body).toHaveProperty("topP", 0.95);
+      expect(result.request!.body).toHaveProperty("topK", 40);
     });
 
     it("passes custom generation options", async () => {
@@ -922,6 +924,15 @@ describe("LlamaCppLanguageModel Integration", () => {
       ).rejects.toThrow("maxOutputTokens 17 exceeds the loaded contextSize 16");
 
       await smallContextModel.dispose();
+    });
+
+    it("allows maxOutputTokens -1 for server-compatible unlimited prediction", async () => {
+      const result = await model.doGenerate({
+        prompt: [{ role: "user", content: [{ type: "text", text: "test" }] }],
+        maxOutputTokens: -1,
+      });
+
+      expect(result.request!.body).toHaveProperty("maxTokens", -1);
     });
 
     it("uses default values for optional config", async () => {

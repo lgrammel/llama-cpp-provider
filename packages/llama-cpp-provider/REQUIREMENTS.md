@@ -40,11 +40,12 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 - The language model must implement non-streaming generation with `doGenerate`.
 - The language model must implement streaming generation with `doStream`.
 - Generation calls must pass converted chat messages to the native binding.
-- Default generation options must be `maxTokens: 256`, `temperature: 0.7`, `topP: 0.9`, and `topK: 40`.
+- Default generation options must match llama.cpp server defaults: `maxTokens: -1`, `temperature: 0.8`, `topP: 0.95`, and `topK: 40`.
 - AI SDK `maxOutputTokens`, `temperature`, `topP`, `topK`, and `stopSequences` must be forwarded to native generation.
 - AI SDK `seed` must be forwarded to native generation when provided.
 - Omitted `seed` must use llama.cpp random seeding.
-- `maxOutputTokens` must be a positive integer and must not exceed the loaded context size.
+- `maxOutputTokens` must be `-1` or a positive integer.
+- Positive `maxOutputTokens` values must not exceed the loaded context size.
 - `seed` must be an integer between 0 and 4294967295 when provided.
 - Native `stop` and `length` finish reasons must map to AI SDK finish reasons with the same unified value; other native finish reasons must map to `other`.
 - Usage must report prompt tokens as input tokens and completion tokens as output text tokens.

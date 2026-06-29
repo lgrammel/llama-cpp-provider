@@ -369,6 +369,10 @@ static common_chat_tool_choice parse_tool_choice(const std::string &tool_choice)
   return COMMON_CHAT_TOOL_CHOICE_AUTO;
 }
 
+static bool has_reached_predict_limit(int decoded_tokens, int max_tokens) {
+  return max_tokens >= 0 && decoded_tokens >= max_tokens;
+}
+
 bool LlamaModel::prepare_prompt(const std::vector<ChatMessage> &messages,
                                 const GenerationParams &params, GenerationResult &result,
                                 std::string &prompt, GenerationParams &effective_params,
@@ -671,7 +675,8 @@ bool LlamaModel::prefill_prompt(const std::string &prompt,
     result.prompt_tokens = prompt_tokens.size();
 
     const int n_ctx = llama_n_ctx(ctx_);
-    if (result.prompt_tokens + params.max_tokens > n_ctx) {
+    if (result.prompt_tokens >= n_ctx ||
+        (params.max_tokens >= 0 && result.prompt_tokens + params.max_tokens > n_ctx)) {
       result.error_message = "Prompt tokens plus max_tokens exceed context size";
       return false;
     }
@@ -764,7 +769,7 @@ bool LlamaModel::prefill_prompt(const std::string &prompt,
   n_past = static_cast<int>(new_n_past);
   result.cache_write_tokens = n_past;
   const int n_ctx = llama_n_ctx(ctx_);
-  if (n_past + params.max_tokens > n_ctx) {
+  if (n_past >= n_ctx || (params.max_tokens >= 0 && n_past + params.max_tokens > n_ctx)) {
     result.error_message = "Prompt tokens plus max_tokens exceed context size";
     return false;
   }
@@ -832,8 +837,13 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
   std::string generated_text;
   int n_cur = n_past;
 
-  for (int i = 0; i < effective_params.max_tokens; i++) {
+  for (int i = 0; !has_reached_predict_limit(i, effective_params.max_tokens); i++) {
     if (is_cancelled(result, cancellation)) {
+      break;
+    }
+
+    if (n_cur >= llama_n_ctx(ctx_)) {
+      result.finish_reason = "length";
       break;
     }
 
@@ -888,7 +898,7 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
 
   if (result.error_message == "Generation aborted") {
     cached_tokens_.clear();
-  } else if (result.finish_reason == "error" &&
+  } else if (effective_params.max_tokens >= 0 && result.finish_reason == "error" &&
              result.completion_tokens >= effective_params.max_tokens) {
     result.finish_reason = "length";
   } else if (result.finish_reason == "error" && result.error_message.empty()) {
@@ -963,8 +973,13 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
   std::string pending_text;
   int n_cur = n_past;
 
-  for (int i = 0; i < effective_params.max_tokens; i++) {
+  for (int i = 0; !has_reached_predict_limit(i, effective_params.max_tokens); i++) {
     if (is_cancelled(result, cancellation)) {
+      break;
+    }
+
+    if (n_cur >= llama_n_ctx(ctx_)) {
+      result.finish_reason = "length";
       break;
     }
 
@@ -1047,7 +1062,7 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
 
   if (result.error_message == "Generation aborted") {
     cached_tokens_.clear();
-  } else if (result.finish_reason == "error" &&
+  } else if (effective_params.max_tokens >= 0 && result.finish_reason == "error" &&
              result.completion_tokens >= effective_params.max_tokens) {
     result.finish_reason = "length";
   } else if (result.finish_reason == "error" && result.error_message.empty()) {

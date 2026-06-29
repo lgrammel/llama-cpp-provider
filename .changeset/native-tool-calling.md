@@ -2,4 +2,4 @@
 "@lgrammel/llama-cpp-provider": minor
 ---
 
-Align tool calling with llama.cpp server common-chat templates and parsers.
+Align tool calling and generation defaults with llama.cpp server behavior.

@@ -55,9 +55,9 @@ struct ContextParams {
 };
 
 struct GenerationParams {
-  int max_tokens = 256;
-  float temperature = 0.7f;
-  float top_p = 0.9f;
+  int max_tokens = -1;
+  float temperature = 0.8f;
+  float top_p = 0.95f;
   int top_k = 40;
   uint32_t seed = 0xFFFFFFFFu; // LLAMA_DEFAULT_SEED: use a random seed
   float repeat_penalty = 1.1f;

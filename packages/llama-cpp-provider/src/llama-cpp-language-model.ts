@@ -107,7 +107,10 @@ interface ResolvedReasoningConfig {
 }
 
 const mediaMarker = "<__media__>";
-const DEFAULT_MAX_TOKENS = 256;
+const DEFAULT_MAX_TOKENS = -1;
+const DEFAULT_TEMPERATURE = 0.8;
+const DEFAULT_TOP_P = 0.95;
+const DEFAULT_TOP_K = 40;
 
 function isImageMediaType(mediaType?: string): boolean {
   const normalized = mediaType?.toLowerCase();
@@ -1007,9 +1010,9 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       toolChoice: toolSettings.toolChoice,
       parallelToolCalls: resolveParallelToolCalls(options),
       maxTokens: options.maxOutputTokens ?? DEFAULT_MAX_TOKENS,
-      temperature: options.temperature ?? 0.7,
-      topP: options.topP ?? 0.9,
-      topK: options.topK ?? 40,
+      temperature: options.temperature ?? DEFAULT_TEMPERATURE,
+      topP: options.topP ?? DEFAULT_TOP_P,
+      topK: options.topK ?? DEFAULT_TOP_K,
       stopSequences: options.stopSequences,
       grammar,
     };
@@ -1153,9 +1156,9 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       toolChoice: toolSettings.toolChoice,
       parallelToolCalls: resolveParallelToolCalls(options),
       maxTokens: options.maxOutputTokens ?? DEFAULT_MAX_TOKENS,
-      temperature: options.temperature ?? 0.7,
-      topP: options.topP ?? 0.9,
-      topK: options.topK ?? 40,
+      temperature: options.temperature ?? DEFAULT_TEMPERATURE,
+      topP: options.topP ?? DEFAULT_TOP_P,
+      topK: options.topK ?? DEFAULT_TOP_K,
       stopSequences: options.stopSequences,
       grammar,
     };
@@ -1447,8 +1450,12 @@ function validateGenerationContextSize(
     return;
   }
 
-  if (!Number.isInteger(maxTokens) || maxTokens <= 0) {
-    throw new Error("maxOutputTokens must be a positive integer");
+  if (!Number.isInteger(maxTokens) || (maxTokens <= 0 && maxTokens !== -1)) {
+    throw new Error("maxOutputTokens must be -1 or a positive integer");
+  }
+
+  if (maxTokens === -1) {
+    return;
   }
 
   if (maxTokens > contextSize) {
