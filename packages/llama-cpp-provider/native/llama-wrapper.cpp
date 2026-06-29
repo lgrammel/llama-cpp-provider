@@ -411,20 +411,34 @@ bool LlamaModel::prefill_prompt(const std::string &prompt,
   }
 
   std::vector<mtmd_bitmap *> bitmaps;
+  std::vector<mtmd_helper_video *> video_contexts;
   std::vector<const mtmd_bitmap *> bitmap_ptrs;
   bitmaps.reserve(images.size());
+  video_contexts.reserve(images.size());
   bitmap_ptrs.reserve(images.size());
 
+  auto free_media = [&bitmaps, &video_contexts]() {
+    for (mtmd_bitmap *bitmap : bitmaps) {
+      mtmd_bitmap_free(bitmap);
+    }
+    for (mtmd_helper_video *video_context : video_contexts) {
+      mtmd_helper_video_free(video_context);
+    }
+  };
+
   for (const auto &image : images) {
-    mtmd_bitmap *bitmap = mtmd_helper_bitmap_init_from_buf(mtmd_ctx_, image.data(), image.size());
+    mtmd_helper_bitmap_wrapper bitmap_result =
+        mtmd_helper_bitmap_init_from_buf(mtmd_ctx_, image.data(), image.size(), false);
+    mtmd_bitmap *bitmap = bitmap_result.bitmap;
     if (!bitmap) {
-      for (mtmd_bitmap *created_bitmap : bitmaps) {
-        mtmd_bitmap_free(created_bitmap);
-      }
+      free_media();
       result.error_message = "Failed to decode image input";
       return false;
     }
     bitmaps.push_back(bitmap);
+    if (bitmap_result.video_ctx) {
+      video_contexts.push_back(bitmap_result.video_ctx);
+    }
     bitmap_ptrs.push_back(bitmap);
   }
 
@@ -438,9 +452,7 @@ bool LlamaModel::prefill_prompt(const std::string &prompt,
       mtmd_tokenize(mtmd_ctx_, chunks, &text, bitmap_ptrs.data(), bitmap_ptrs.size());
   if (tokenize_result != 0) {
     mtmd_input_chunks_free(chunks);
-    for (mtmd_bitmap *bitmap : bitmaps) {
-      mtmd_bitmap_free(bitmap);
-    }
+    free_media();
     result.error_message = "Failed to tokenize multimodal prompt";
     return false;
   }
@@ -451,9 +463,7 @@ bool LlamaModel::prefill_prompt(const std::string &prompt,
 
   result.prompt_tokens = static_cast<int>(mtmd_helper_get_n_tokens(chunks));
   mtmd_input_chunks_free(chunks);
-  for (mtmd_bitmap *bitmap : bitmaps) {
-    mtmd_bitmap_free(bitmap);
-  }
+  free_media();
 
   if (eval_result != 0) {
     result.error_message = "Failed to decode multimodal prompt";

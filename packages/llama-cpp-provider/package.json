@@ -18,8 +18,8 @@
     "CMakeLists.txt"
   ],
   "llamaCpp": {
-    "repo": "https://github.com/ggerganov/llama.cpp.git",
-    "commit": "634275fbbb0a01b95e86e30c5e740e7f44d10d2f"
+    "repo": "https://github.com/ggml-org/llama.cpp.git",
+    "commit": "8c146a8366304c871efc26057cc90370ccf58dad"
   },
   "scripts": {
     "postinstall": "node scripts/postinstall.cjs",
