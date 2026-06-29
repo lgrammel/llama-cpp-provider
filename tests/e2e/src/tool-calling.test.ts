@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateText, tool, stepCountIs } from "ai";
 import { z } from "zod/v4";
 import { llamaCpp, LlamaCppLanguageModel } from "@lgrammel/llama-cpp-provider";
+import { formatModelInfo, languageModelConfig } from "./e2e-config.js";
 
 /**
  * E2E tests for tool calling with llama.cpp.
@@ -10,6 +11,11 @@ import { llamaCpp, LlamaCppLanguageModel } from "@lgrammel/llama-cpp-provider";
  * environment variable to run these tests:
  *
  *   TEST_MODEL_PATH=./models/your-model.gguf pnpm test:e2e
+ *
+ * Set TEST_CHAT_TEMPLATE when the embedded model chat template is not
+ * supported by the pinned llama.cpp revision, for example:
+ *
+ *   TEST_CHAT_TEMPLATE=gemma TEST_MODEL_PATH=./models/gemma.gguf pnpm test:e2e
  *
  * Note: Tool calling quality depends heavily on the model's capabilities.
  * Models specifically fine-tuned for function calling (e.g., Llama 3.1+,
@@ -39,12 +45,14 @@ describeE2E("E2E Tool Calling Tests", () => {
       throw new Error("TEST_MODEL_PATH environment variable not set");
     }
 
-    model = llamaCpp({
-      modelPath: TEST_MODEL_PATH,
-      contextSize: 4096,
-      gpuLayers: 0, // Use CPU for CI compatibility
-      threads: 4,
-    });
+    model = llamaCpp(
+      languageModelConfig({
+        modelPath: TEST_MODEL_PATH,
+        contextSize: 4096,
+        gpuLayers: 0, // Use CPU for CI compatibility
+        threads: 4,
+      })
+    );
   });
 
   afterAll(async () => {
@@ -248,11 +256,14 @@ describe("E2E Tool Calling Test Configuration", () => {
         "   Example: TEST_MODEL_PATH=./models/model.gguf pnpm test:e2e"
       );
       console.log(
+        "   If chat templating fails, add TEST_CHAT_TEMPLATE=gemma or another llama.cpp template name"
+      );
+      console.log(
         "   Note: Use a model fine-tuned for function calling for best results\n"
       );
     } else {
       console.log(
-        `\n✅ Running tool calling E2E tests with model: ${TEST_MODEL_PATH}\n`
+        `\n✅ Running tool calling E2E tests with model: ${formatModelInfo(TEST_MODEL_PATH)}\n`
       );
     }
     expect(true).toBe(true);

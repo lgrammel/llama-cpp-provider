@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateText, streamText } from "ai";
 import { llamaCpp, LlamaCppLanguageModel } from "@lgrammel/llama-cpp-provider";
+import { formatModelInfo, languageModelConfig } from "./e2e-config.js";
 
 /**
  * E2E tests for the llama.cpp provider.
@@ -9,6 +10,11 @@ import { llamaCpp, LlamaCppLanguageModel } from "@lgrammel/llama-cpp-provider";
  * environment variable to run these tests:
  *
  *   TEST_MODEL_PATH=./models/your-model.gguf pnpm test:e2e
+ *
+ * Set TEST_CHAT_TEMPLATE when the embedded model chat template is not
+ * supported by the pinned llama.cpp revision, for example:
+ *
+ *   TEST_CHAT_TEMPLATE=gemma TEST_MODEL_PATH=./models/gemma.gguf pnpm test:e2e
  *
  * If TEST_MODEL_PATH is not set, these tests will be skipped.
  */
@@ -26,12 +32,14 @@ describeE2E("E2E Generation Tests", () => {
       throw new Error("TEST_MODEL_PATH environment variable not set");
     }
 
-    model = llamaCpp({
-      modelPath: TEST_MODEL_PATH,
-      contextSize: 2048,
-      gpuLayers: 0, // Use CPU for CI compatibility
-      threads: 4,
-    });
+    model = llamaCpp(
+      languageModelConfig({
+        modelPath: TEST_MODEL_PATH,
+        contextSize: 2048,
+        gpuLayers: 0, // Use CPU for CI compatibility
+        threads: 4,
+      })
+    );
   });
 
   afterAll(async () => {
@@ -211,10 +219,12 @@ describeE2E("E2E Generation Tests", () => {
     it("can create multiple model instances", { timeout: 120000 }, async () => {
       if (!TEST_MODEL_PATH) return;
 
-      const model2 = llamaCpp({
-        modelPath: TEST_MODEL_PATH,
-        contextSize: 1024,
-      });
+      const model2 = llamaCpp(
+        languageModelConfig({
+          modelPath: TEST_MODEL_PATH,
+          contextSize: 1024,
+        })
+      );
 
       const { text } = await generateText({
         model: model2,
@@ -230,9 +240,11 @@ describeE2E("E2E Generation Tests", () => {
     it("handles dispose gracefully", { timeout: 120000 }, async () => {
       if (!TEST_MODEL_PATH) return;
 
-      const tempModel = llamaCpp({
-        modelPath: TEST_MODEL_PATH,
-      });
+      const tempModel = llamaCpp(
+        languageModelConfig({
+          modelPath: TEST_MODEL_PATH,
+        })
+      );
 
       // Generate to load the model
       await generateText({
@@ -257,8 +269,13 @@ describe("E2E Test Configuration", () => {
       console.log(
         "   Example: TEST_MODEL_PATH=./models/model.gguf pnpm test:e2e\n"
       );
+      console.log(
+        "   If chat templating fails, add TEST_CHAT_TEMPLATE=gemma or another llama.cpp template name\n"
+      );
     } else {
-      console.log(`\n✅ Running E2E tests with model: ${TEST_MODEL_PATH}\n`);
+      console.log(
+        `\n✅ Running E2E tests with model: ${formatModelInfo(TEST_MODEL_PATH)}\n`
+      );
     }
     expect(true).toBe(true);
   });
