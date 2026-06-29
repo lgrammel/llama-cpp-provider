@@ -320,6 +320,16 @@ try {
 
 ## Common Tasks
 
+### Creating Changesets
+
+This repository uses Changesets for versioning and changelog entries. The tooling is already configured in `.changeset/config.json` and exposed through root package scripts.
+
+```bash
+pnpm changeset
+```
+
+Use `pnpm changeset` after user-facing package changes. Select the changed package, choose the semver bump (`patch` for fixes, `minor` for backwards-compatible features, `major` for breaking changes), and write a short summary focused on the release note.
+
 ### Adding a New Feature
 
 1. Implement in appropriate `packages/llama-cpp-provider/src/` file

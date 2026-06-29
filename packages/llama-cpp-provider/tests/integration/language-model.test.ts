@@ -5,10 +5,13 @@ import type { LanguageModelV4Message } from "@ai-sdk/provider";
 vi.mock("../../src/native-binding.js", () => ({
   loadModel: vi.fn().mockResolvedValue(1),
   unloadModel: vi.fn().mockReturnValue(true),
+  cancelGeneration: vi.fn().mockReturnValue(true),
   generate: vi.fn().mockResolvedValue({
     text: "Mock response text",
     promptTokens: 50,
     completionTokens: 10,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 50,
     finishReason: "stop",
   }),
   generateStream: vi.fn((handle, opts, onToken) => {
@@ -21,6 +24,8 @@ vi.mock("../../src/native-binding.js", () => ({
       text: "Hello world!",
       promptTokens: 30,
       completionTokens: 4,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 30,
       finishReason: "stop",
     });
   }),
@@ -98,6 +103,25 @@ describe("LlamaCppLanguageModel Integration", () => {
       expect(result.usage.outputTokens.total).toBe(10);
     });
 
+    it("returns cache usage statistics when native result includes them", async () => {
+      vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
+        text: "Cached response",
+        promptTokens: 50,
+        completionTokens: 10,
+        cacheReadTokens: 40,
+        cacheWriteTokens: 10,
+        finishReason: "stop",
+      });
+
+      const result = await model.doGenerate({
+        prompt: testMessages,
+      });
+
+      expect(result.usage.inputTokens.noCache).toBe(10);
+      expect(result.usage.inputTokens.cacheRead).toBe(40);
+      expect(result.usage.inputTokens.cacheWrite).toBe(10);
+    });
+
     it("returns empty warnings array", async () => {
       const result = await model.doGenerate({
         prompt: testMessages,
@@ -153,6 +177,74 @@ describe("LlamaCppLanguageModel Integration", () => {
           stopSequences: ["END"],
         })
       );
+    });
+
+    it("rejects and cancels native generation when aborted", async () => {
+      const controller = new AbortController();
+      let markGenerationStarted!: () => void;
+      const generationStarted = new Promise<void>((resolve) => {
+        markGenerationStarted = resolve;
+      });
+      vi.mocked(nativeBinding.generate).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            markGenerationStarted();
+            setTimeout(() => {
+              resolve({
+                text: "Late response",
+                promptTokens: 50,
+                completionTokens: 10,
+                finishReason: "stop",
+              });
+            }, 50);
+          })
+      );
+
+      const promise = model.doGenerate({
+        prompt: testMessages,
+        abortSignal: controller.signal,
+      });
+
+      await generationStarted;
+      controller.abort();
+
+      await expect(promise).rejects.toMatchObject({ name: "AbortError" });
+      expect(nativeBinding.cancelGeneration).toHaveBeenCalledWith(1);
+    });
+
+    it("does not start native generation when already aborted", async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        model.doGenerate({
+          prompt: testMessages,
+          abortSignal: controller.signal,
+        })
+      ).rejects.toMatchObject({ name: "AbortError" });
+
+      expect(nativeBinding.generate).not.toHaveBeenCalled();
+      expect(nativeBinding.cancelGeneration).not.toHaveBeenCalled();
+    });
+
+    it("enables native prompt cache when configured", async () => {
+      const cachedModel = new LlamaCppLanguageModel({
+        modelPath: "/test/model.gguf",
+        cache: { mode: "prefix" },
+      });
+
+      await cachedModel.doGenerate({
+        prompt: testMessages,
+      });
+
+      expect(nativeBinding.generate).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          promptCache: true,
+        })
+      );
+
+      await cachedModel.dispose();
     });
 
     it("passes messages correctly to native binding", async () => {
@@ -496,6 +588,32 @@ describe("LlamaCppLanguageModel Integration", () => {
       expect(finishPart?.usage?.outputTokens.total).toBe(4);
     });
 
+    it("finish part contains cache usage", async () => {
+      vi.mocked(nativeBinding.generateStream).mockImplementationOnce(
+        (handle, opts, onToken) => {
+          onToken("Hello");
+          return Promise.resolve({
+            text: "Hello",
+            promptTokens: 30,
+            completionTokens: 1,
+            cacheReadTokens: 20,
+            cacheWriteTokens: 10,
+            finishReason: "stop",
+          });
+        }
+      );
+
+      const { stream } = await model.doStream({
+        prompt: testMessages,
+      });
+
+      const parts = await collectStreamParts(stream);
+      const finishPart = parts.find((p) => p.type === "finish");
+
+      expect(finishPart?.usage?.inputTokens.cacheRead).toBe(20);
+      expect(finishPart?.usage?.inputTokens.cacheWrite).toBe(10);
+    });
+
     it("all text-delta parts share the same id", async () => {
       const { stream } = await model.doStream({
         prompt: testMessages,
@@ -513,6 +631,58 @@ describe("LlamaCppLanguageModel Integration", () => {
         expect(delta.id).toBe(expectedId);
       }
       expect(textEnd?.id).toBe(expectedId);
+    });
+
+    it("errors the stream and cancels native generation when aborted", async () => {
+      const controller = new AbortController();
+      vi.mocked(nativeBinding.generateStream).mockImplementationOnce(
+        (_handle, _opts, onToken) =>
+          new Promise((resolve) => {
+            onToken("Hello");
+            setTimeout(() => {
+              resolve({
+                text: "Hello",
+                promptTokens: 30,
+                completionTokens: 1,
+                finishReason: "stop",
+              });
+            }, 50);
+          })
+      );
+
+      const { stream } = await model.doStream({
+        prompt: testMessages,
+        abortSignal: controller.signal,
+      });
+
+      const reader = stream.getReader();
+      expect((await reader.read()).value?.type).toBe("stream-start");
+      expect((await reader.read()).value?.type).toBe("text-start");
+      expect((await reader.read()).value?.type).toBe("text-delta");
+
+      controller.abort();
+
+      await expect(reader.read()).rejects.toMatchObject({
+        name: "AbortError",
+      });
+      expect(nativeBinding.cancelGeneration).toHaveBeenCalledWith(1);
+
+      reader.releaseLock();
+    });
+
+    it("rejects before creating a stream when already aborted", async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        model.doStream({
+          prompt: testMessages,
+          abortSignal: controller.signal,
+        })
+      ).rejects.toMatchObject({ name: "AbortError" });
+
+      expect(nativeBinding.generateStream).not.toHaveBeenCalled();
+      expect(nativeBinding.cancelGeneration).not.toHaveBeenCalled();
     });
 
     it("streams Gemma 4 thinking as reasoning deltas", async () => {
@@ -604,6 +774,7 @@ describe("LlamaCppLanguageModel Integration", () => {
         gpuLayers: 32,
         threads: 8,
         debug: true,
+        logPrompts: true,
         chatTemplate: "llama3",
         mmprojPath: "/custom/mmproj.gguf",
         memorySafety: { mode: "off" },
@@ -619,6 +790,7 @@ describe("LlamaCppLanguageModel Integration", () => {
         gpuLayers: 32,
         threads: 8,
         debug: true,
+        logPrompts: true,
         chatTemplate: "llama3",
         mmprojPath: "/custom/mmproj.gguf",
       });
@@ -711,6 +883,7 @@ describe("LlamaCppLanguageModel Integration", () => {
         gpuLayers: 99,
         threads: 4,
         debug: false,
+        logPrompts: false,
         chatTemplate: "auto",
       });
 
@@ -934,6 +1107,182 @@ describe("LlamaCppLanguageModel Integration", () => {
       expect(result.content).toHaveLength(1);
       expect(result.content[0].type).toBe("text");
     });
+
+    it("preserves generated tool-call JSON in later cached prompts", async () => {
+      const cachedModel = new LlamaCppLanguageModel({
+        modelPath: "/test/model.gguf",
+        cache: { mode: "prefix" },
+      });
+      const rawToolCall =
+        '{"name": "get_weather", "arguments": {"location": "Tokyo"}}';
+
+      vi.mocked(nativeBinding.generate)
+        .mockResolvedValueOnce({
+          text: rawToolCall,
+          promptTokens: 100,
+          completionTokens: 20,
+          finishReason: "stop",
+        })
+        .mockResolvedValueOnce({
+          text: "It is 72 degrees in Tokyo.",
+          promptTokens: 130,
+          completionTokens: 8,
+          cacheReadTokens: 120,
+          cacheWriteTokens: 10,
+          finishReason: "stop",
+        });
+
+      const first = await cachedModel.doGenerate({
+        prompt: testMessages,
+        tools: testTools,
+      });
+      const toolCall = first.content.find((part) => part.type === "tool-call");
+
+      expect(toolCall).toBeDefined();
+
+      await cachedModel.doGenerate({
+        prompt: [
+          ...testMessages,
+          {
+            role: "assistant",
+            content: [toolCall!],
+          },
+          {
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: toolCall!.toolCallId,
+                toolName: toolCall!.toolName,
+                output: {
+                  type: "json",
+                  value: { location: "Tokyo", temperature: 72 },
+                },
+              },
+            ],
+          },
+        ],
+        tools: testTools,
+      });
+
+      expect(nativeBinding.generate).toHaveBeenNthCalledWith(
+        2,
+        expect.any(Number),
+        expect.objectContaining({
+          promptCache: true,
+          messages: expect.arrayContaining([
+            {
+              role: "assistant",
+              content: rawToolCall,
+            },
+          ]),
+        })
+      );
+
+      await cachedModel.dispose();
+    });
+
+    it("preserves generated tool-call JSON across later cached turns", async () => {
+      const cachedModel = new LlamaCppLanguageModel({
+        modelPath: "/test/model.gguf",
+        cache: { mode: "prefix" },
+      });
+      const rawToolCall =
+        '{"name": "get_weather", "arguments": {"location": "Tokyo"}}';
+
+      vi.mocked(nativeBinding.generate)
+        .mockResolvedValueOnce({
+          text: rawToolCall,
+          promptTokens: 100,
+          completionTokens: 20,
+          finishReason: "stop",
+        })
+        .mockResolvedValueOnce({
+          text: "It is 72 degrees in Tokyo.",
+          promptTokens: 130,
+          completionTokens: 8,
+          cacheReadTokens: 120,
+          cacheWriteTokens: 10,
+          finishReason: "stop",
+        })
+        .mockResolvedValueOnce({
+          text: "Yes, it is warm.",
+          promptTokens: 150,
+          completionTokens: 6,
+          cacheReadTokens: 140,
+          cacheWriteTokens: 10,
+          finishReason: "stop",
+        });
+
+      const first = await cachedModel.doGenerate({
+        prompt: testMessages,
+        tools: testTools,
+      });
+      const toolCall = first.content.find((part) => part.type === "tool-call");
+
+      expect(toolCall).toBeDefined();
+
+      const afterToolPrompt: LanguageModelV4Message[] = [
+        ...testMessages,
+        {
+          role: "assistant",
+          content: [toolCall!],
+        },
+        {
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: toolCall!.toolCallId,
+              toolName: toolCall!.toolName,
+              output: {
+                type: "json",
+                value: { location: "Tokyo", temperature: 72 },
+              },
+            },
+          ],
+        },
+      ];
+
+      const second = await cachedModel.doGenerate({
+        prompt: afterToolPrompt,
+        tools: testTools,
+      });
+      const secondText = second.content.find((part) => part.type === "text");
+
+      expect(secondText).toBeDefined();
+
+      await cachedModel.doGenerate({
+        prompt: [
+          ...afterToolPrompt,
+          {
+            role: "assistant",
+            content: [secondText!],
+          },
+          {
+            role: "user",
+            content: [{ type: "text", text: "Is that warm?" }],
+          },
+        ],
+        tools: testTools,
+      });
+
+      expect(nativeBinding.generate).toHaveBeenNthCalledWith(
+        3,
+        expect.any(Number),
+        expect.objectContaining({
+          promptCache: true,
+          messages: expect.arrayContaining([
+            {
+              role: "assistant",
+              content: rawToolCall,
+            },
+          ]),
+        })
+      );
+
+      await cachedModel.dispose();
+    });
   });
 
   describe("doStream with tools", () => {
@@ -1123,6 +1472,85 @@ describe("LlamaCppLanguageModel Integration", () => {
       const toolCallPart = parts.find((p) => p.type === "tool-call");
       expect(toolCallPart).toBeDefined();
       expect(toolCallPart?.toolName).toBe("weather");
+    });
+
+    it("preserves streamed tool-call JSON in later cached prompts", async () => {
+      const cachedModel = new LlamaCppLanguageModel({
+        modelPath: "/test/model.gguf",
+        cache: { mode: "prefix" },
+      });
+      const rawToolCall =
+        '{"name": "weather", "arguments": {"location": "Tokyo"}}';
+
+      vi.mocked(nativeBinding.generateStream).mockImplementationOnce(
+        (handle, opts, onToken) => {
+          onToken(rawToolCall);
+          return Promise.resolve({
+            text: rawToolCall,
+            promptTokens: 50,
+            completionTokens: 15,
+            finishReason: "stop",
+          });
+        }
+      );
+
+      const first = await cachedModel.doStream({
+        prompt: testMessages,
+        tools: testTools,
+      });
+      const firstParts = await collectStreamParts(first.stream);
+      const toolCall = firstParts.find((part) => part.type === "tool-call");
+
+      expect(toolCall).toBeDefined();
+
+      vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
+        text: "It is sunny in Tokyo.",
+        promptTokens: 80,
+        completionTokens: 6,
+        cacheReadTokens: 70,
+        cacheWriteTokens: 10,
+        finishReason: "stop",
+      });
+
+      await cachedModel.doGenerate({
+        prompt: [
+          ...testMessages,
+          {
+            role: "assistant",
+            content: [toolCall],
+          },
+          {
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: toolCall.toolCallId,
+                toolName: toolCall.toolName,
+                output: {
+                  type: "json",
+                  value: { location: "Tokyo", condition: "sunny" },
+                },
+              },
+            ],
+          },
+        ],
+        tools: testTools,
+      });
+
+      expect(nativeBinding.generate).toHaveBeenLastCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          promptCache: true,
+          messages: expect.arrayContaining([
+            {
+              role: "assistant",
+              content: rawToolCall,
+            },
+          ]),
+        })
+      );
+
+      await cachedModel.dispose();
     });
   });
 });

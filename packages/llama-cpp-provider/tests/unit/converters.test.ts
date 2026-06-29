@@ -88,6 +88,17 @@ describe("convertUsage", () => {
       expect(result.inputTokens.cacheWrite).toBeUndefined();
     });
 
+    it("sets inputTokens cache fields when provided", () => {
+      const result = convertUsage(100, 50, {
+        read: 80,
+        write: 20,
+      });
+
+      expect(result.inputTokens.noCache).toBe(20);
+      expect(result.inputTokens.cacheRead).toBe(80);
+      expect(result.inputTokens.cacheWrite).toBe(20);
+    });
+
     it("sets outputTokens.reasoning to undefined", () => {
       const result = convertUsage(100, 50);
 

@@ -18,6 +18,7 @@ import {
   unloadModel,
   generate,
   generateStream,
+  cancelGeneration,
   isModelLoaded,
   type LoadModelOptions,
   type GenerateOptions,
@@ -31,6 +32,7 @@ import {
 } from "./json-schema-to-grammar.js";
 import {
   thinkTagsReasoning,
+  type LlamaCppCacheConfig,
   type LlamaCppMemorySafetyConfig,
   type LlamaCppModelMemoryInfo,
   type LlamaCppReasoningConfig,
@@ -64,6 +66,13 @@ export interface LlamaCppModelConfig {
    */
   debug?: boolean;
   /**
+   * Print the final chat-template-rendered prompt sent to llama.cpp to stderr.
+   *
+   * This may include private user data. Intended for local debugging only.
+   * Default: false
+   */
+  logPrompts?: boolean;
+  /**
    * Chat template to use for formatting messages.
    * - "auto" (default): Use the template embedded in the GGUF model file
    * - Template name: Use a specific built-in template (e.g., "llama3", "chatml", "gemma")
@@ -77,6 +86,7 @@ export interface LlamaCppModelConfig {
    * Extract model thinking into AI SDK reasoning parts.
    */
   reasoning?: LlamaCppReasoningConfig;
+  cache?: LlamaCppCacheConfig;
 }
 
 export interface LlamaCppGenerationConfig {
@@ -102,6 +112,18 @@ function isImageMediaType(mediaType?: string): boolean {
 
 function decodeBase64(base64: string): Uint8Array {
   return Uint8Array.from(Buffer.from(base64, "base64"));
+}
+
+function createAbortError(): Error {
+  const error = new Error("The operation was aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
 }
 
 function parseDataUrl(url: string): { data: Uint8Array; mediaType?: string } {
@@ -391,14 +413,21 @@ export function convertFinishReason(
 
 export function convertUsage(
   promptTokens: number,
-  completionTokens: number
+  completionTokens: number,
+  cache?: {
+    read?: number;
+    write?: number;
+  }
 ): LanguageModelV4Usage {
   return {
     inputTokens: {
       total: promptTokens,
-      noCache: undefined,
-      cacheRead: undefined,
-      cacheWrite: undefined,
+      noCache:
+        cache?.read !== undefined || cache?.write !== undefined
+          ? promptTokens - (cache.read ?? 0)
+          : undefined,
+      cacheRead: cache?.read,
+      cacheWrite: cache?.write,
     },
     outputTokens: {
       total: completionTokens,
@@ -572,6 +601,10 @@ function generateToolCallId(): string {
   return `call_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
 }
 
+function toolCallCacheKey(toolCallIds: string[]): string {
+  return toolCallIds.join("\n");
+}
+
 /**
  * Build a system prompt that instructs the model to use tools.
  */
@@ -609,7 +642,8 @@ Rules:
 export function convertMessages(
   messages: LanguageModelV4Message[],
   tools?: LanguageModelV4FunctionTool[],
-  reasoning?: Pick<ResolvedReasoningConfig, "promptPrefix">
+  reasoning?: Pick<ResolvedReasoningConfig, "promptPrefix">,
+  toolCallContentCache?: ReadonlyMap<string, string>
 ): ChatMessage[] {
   const result: ChatMessage[] = [];
   let reasoningPromptAdded = false;
@@ -695,14 +729,19 @@ export function convertMessages(
 
         // If there are tool calls, format them as JSON
         if (toolCallParts.length > 0) {
-          const toolCallsJson = JSON.stringify({
-            tool_calls: toolCallParts.map((tc) => ({
-              id: tc.toolCallId,
-              name: tc.toolName,
-              arguments: tc.input,
-            })),
-          });
-          assistantContent = toolCallsJson;
+          const cachedToolCallContent = toolCallContentCache?.get(
+            toolCallCacheKey(toolCallParts.map((tc) => tc.toolCallId))
+          );
+
+          assistantContent =
+            cachedToolCallContent ??
+            JSON.stringify({
+              tool_calls: toolCallParts.map((tc) => ({
+                id: tc.toolCallId,
+                name: tc.toolName,
+                arguments: tc.input,
+              })),
+            });
         }
 
         if (assistantContent) {
@@ -768,6 +807,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   readonly specificationVersion = "v4" as const;
   readonly provider = "llama.cpp";
   readonly modelId: string;
+  readonly contextSize: number;
 
   /**
    * Supported URL patterns - empty since we only support local files
@@ -778,10 +818,12 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   private readonly config: LlamaCppModelConfig;
   private initPromise: Promise<void> | null = null;
   private loadedContextSize: number | null = null;
+  private readonly toolCallContentCache = new Map<string, string>();
 
   constructor(config: LlamaCppModelConfig) {
     this.config = config;
     this.modelId = config.modelPath;
+    this.contextSize = config.contextSize ?? 2048;
   }
 
   private async ensureModelLoaded(): Promise<number> {
@@ -797,12 +839,11 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
     }
 
     this.initPromise = (async () => {
-      const requestedContextSize = this.config.contextSize ?? 2048;
       const memorySafety = await checkModelMemorySafety({
         modelPath: this.config.modelPath,
         mmprojPath: this.config.mmprojPath,
         memory: this.config.memory,
-        contextSize: requestedContextSize,
+        contextSize: this.contextSize,
         memorySafety: this.config.memorySafety,
       });
       const options: LoadModelOptions = {
@@ -811,6 +852,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
         gpuLayers: this.config.gpuLayers ?? 99,
         threads: this.config.threads ?? 4,
         debug: this.config.debug ?? false,
+        logPrompts: this.config.logPrompts ?? false,
         chatTemplate: this.config.chatTemplate ?? "auto",
       };
 
@@ -843,6 +885,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   async doGenerate(
     options: LanguageModelV4CallOptions
   ): Promise<LanguageModelV4GenerateResult> {
+    throwIfAborted(options.abortSignal);
     const handle = await this.ensureModelLoaded();
     // Convert JSON schema to GBNF grammar if structured output is requested
     // Note: Tool calls do NOT use grammar - the model decides whether to call tools
@@ -875,7 +918,8 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       hasTools && options.toolChoice?.type !== "none"
         ? functionTools
         : undefined,
-      reasoningConfig
+      reasoningConfig,
+      this.toolCallContentCache
     );
 
     const generateOptions: GenerateOptions = {
@@ -887,12 +931,19 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       stopSequences: options.stopSequences,
       grammar,
     };
+    if (this.config.cache?.mode === "prefix") {
+      generateOptions.promptCache = true;
+    }
     validateGenerationContextSize(
       this.loadedContextSize,
       generateOptions.maxTokens
     );
 
-    const result = await generate(handle, generateOptions);
+    const result = await this.runWithAbortSignal(
+      handle,
+      options.abortSignal,
+      () => generate(handle, generateOptions)
+    );
     const parsedContent = reasoningConfig
       ? splitReasoningContent(result.text, reasoningConfig)
       : [{ type: "text" as const, text: result.text }];
@@ -910,14 +961,21 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
         appendParsedContent(content, parsedContent, { includeText: false });
 
         // Add tool calls to content
+        const toolCallIds: string[] = [];
         for (const toolCall of toolCalls) {
+          const toolCallId = toolCall.id || generateToolCallId();
+          toolCallIds.push(toolCallId);
           content.push({
             type: "tool-call",
-            toolCallId: toolCall.id || generateToolCallId(),
+            toolCallId,
             toolName: toolCall.name,
             input: JSON.stringify(toolCall.arguments),
           });
         }
+        this.toolCallContentCache.set(
+          toolCallCacheKey(toolCallIds),
+          visibleText
+        );
 
         // Set finish reason to tool-calls
         finishReason = {
@@ -936,7 +994,10 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
     return {
       content,
       finishReason,
-      usage: convertUsage(result.promptTokens, result.completionTokens),
+      usage: convertUsage(result.promptTokens, result.completionTokens, {
+        read: result.cacheReadTokens,
+        write: result.cacheWriteTokens,
+      }),
       warnings,
       request: {
         body: generateOptions,
@@ -947,6 +1008,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   async doStream(
     options: LanguageModelV4CallOptions
   ): Promise<LanguageModelV4StreamResult> {
+    throwIfAborted(options.abortSignal);
     const handle = await this.ensureModelLoaded();
     // Convert JSON schema to GBNF grammar if structured output is requested
     // Note: Tool calls do NOT use grammar - the model decides whether to call tools
@@ -979,7 +1041,8 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       hasTools && options.toolChoice?.type !== "none"
         ? functionTools
         : undefined,
-      reasoningConfig
+      reasoningConfig,
+      this.toolCallContentCache
     );
 
     const generateOptions: GenerateOptions = {
@@ -991,6 +1054,9 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       stopSequences: options.stopSequences,
       grammar,
     };
+    if (this.config.cache?.mode === "prefix") {
+      generateOptions.promptCache = true;
+    }
     validateGenerationContextSize(
       this.loadedContextSize,
       generateOptions.maxTokens
@@ -1127,17 +1193,22 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
               )
             : undefined;
 
-          const result = await generateStream(
+          const result = await this.runWithAbortSignal(
             handle,
-            generateOptions,
-            (token) => {
-              fullText += token;
-              if (reasoningProcessor) {
-                reasoningProcessor.push(token);
-              } else {
-                emitTextDelta(token);
-              }
-            }
+            options.abortSignal,
+            () =>
+              generateStream(handle, generateOptions, (token) => {
+                if (options.abortSignal?.aborted) {
+                  return;
+                }
+
+                fullText += token;
+                if (reasoningProcessor) {
+                  reasoningProcessor.push(token);
+                } else {
+                  emitTextDelta(token);
+                }
+              })
           );
 
           reasoningProcessor?.flush();
@@ -1158,8 +1229,10 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
 
             if (toolCalls && toolCalls.length > 0) {
               // Emit tool call events
+              const toolCallIds: string[] = [];
               for (const toolCall of toolCalls) {
                 const toolCallId = toolCall.id || generateToolCallId();
+                toolCallIds.push(toolCallId);
 
                 controller.enqueue({
                   type: "tool-call",
@@ -1168,6 +1241,10 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
                   input: JSON.stringify(toolCall.arguments),
                 });
               }
+              this.toolCallContentCache.set(
+                toolCallCacheKey(toolCallIds),
+                visibleText
+              );
 
               // Set finish reason to tool-calls
               finishReason = {
@@ -1181,7 +1258,10 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
           controller.enqueue({
             type: "finish",
             finishReason,
-            usage: convertUsage(result.promptTokens, result.completionTokens),
+            usage: convertUsage(result.promptTokens, result.completionTokens, {
+              read: result.cacheReadTokens,
+              write: result.cacheWriteTokens,
+            }),
           });
 
           controller.close();
@@ -1197,6 +1277,51 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
         body: generateOptions,
       },
     };
+  }
+
+  private async runWithAbortSignal<T>(
+    handle: number,
+    signal: AbortSignal | undefined,
+    run: () => Promise<T>
+  ): Promise<T> {
+    throwIfAborted(signal);
+
+    if (!signal) {
+      return run();
+    }
+
+    return new Promise<T>((resolve, reject) => {
+      let settled = false;
+      let abortListener: (() => void) | undefined;
+
+      const settle = (callback: () => void) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (abortListener) {
+          signal.removeEventListener("abort", abortListener);
+        }
+        callback();
+      };
+
+      abortListener = () => {
+        cancelGeneration(handle);
+        settle(() => reject(createAbortError()));
+      };
+
+      signal.addEventListener("abort", abortListener, { once: true });
+
+      if (signal.aborted) {
+        abortListener();
+        return;
+      }
+
+      run().then(
+        (result) => settle(() => resolve(result)),
+        (error: unknown) => settle(() => reject(error))
+      );
+    });
   }
 }
 

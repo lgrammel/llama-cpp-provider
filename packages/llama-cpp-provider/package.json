@@ -1,6 +1,6 @@
 {
   "name": "@lgrammel/llama-cpp-provider",
-  "version": "0.1.1",
+  "version": "0.2.4",
   "description": "A minimal llama.cpp provider for the Vercel AI SDK implementing LanguageModelV4 and EmbeddingModelV4",
   "type": "module",
   "main": "./dist/index.js",
@@ -25,6 +25,7 @@
     "postinstall": "node scripts/postinstall.cjs",
     "build:native": "cmake-js compile",
     "build:native:debug": "cmake-js compile --debug",
+    "test:native": "cmake-js reconfigure --CDLLAMA_PROVIDER_BUILD_TESTS=ON && cmake-js build && ctest --test-dir build --output-on-failure",
     "build:ts": "tsc",
     "build": "pnpm run build:native && pnpm run build:ts",
     "clean": "rm -rf dist build llama.cpp",
@@ -49,13 +50,13 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lgrammel/ai-sdk-llama-cpp.git",
+    "url": "git+https://github.com/lgrammel/llama-cpp-provider.git",
     "directory": "packages/llama-cpp-provider"
   },
   "bugs": {
-    "url": "https://github.com/lgrammel/ai-sdk-llama-cpp/issues"
+    "url": "https://github.com/lgrammel/llama-cpp-provider/issues"
   },
-  "homepage": "https://github.com/lgrammel/ai-sdk-llama-cpp#readme",
+  "homepage": "https://github.com/lgrammel/llama-cpp-provider#readme",
   "engines": {
     "node": ">=18.0.0"
   },

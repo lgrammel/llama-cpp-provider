@@ -1,8 +1,11 @@
 #ifndef LLAMA_WRAPPER_H
 #define LLAMA_WRAPPER_H
 
+#include "prompt-cache.h"
+#include <atomic>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -21,7 +24,8 @@ struct ModelParams {
   int n_threads = 4;
   bool use_mmap = true;
   bool use_mlock = false;
-  bool debug = false; // Show verbose llama.cpp output
+  bool debug = false;       // Show verbose llama.cpp output
+  bool log_prompts = false; // Print rendered prompts to stderr for debugging
   std::string chat_template =
       "auto"; // "auto" uses template from model, or specify a built-in template
 };
@@ -47,12 +51,15 @@ struct GenerationParams {
   float repeat_penalty = 1.1f;
   std::vector<std::string> stop_sequences;
   std::string grammar; // GBNF grammar string for structured output
+  bool prompt_cache = false;
 };
 
 struct GenerationResult {
   std::string text;
   int prompt_tokens;
   int completion_tokens;
+  int cache_read_tokens;
+  int cache_write_tokens;
   std::string finish_reason; // "stop", "length", or "error"
   std::string error_message;
 };
@@ -60,6 +67,10 @@ struct GenerationResult {
 struct EmbeddingResult {
   std::vector<std::vector<float>> embeddings; // One embedding vector per input text
   int total_tokens;
+};
+
+struct CancellationToken {
+  std::atomic<bool> cancelled{false};
 };
 
 // Token callback for streaming: returns false to stop generation
@@ -98,11 +109,12 @@ public:
 
   // Generate text from messages (non-streaming)
   GenerationResult generate(const std::vector<ChatMessage> &messages,
-                            const GenerationParams &params);
+                            const GenerationParams &params, const CancellationToken &cancellation);
 
   // Generate text from messages (streaming)
   GenerationResult generate_streaming(const std::vector<ChatMessage> &messages,
-                                      const GenerationParams &params, TokenCallback callback);
+                                      const GenerationParams &params, TokenCallback callback,
+                                      const CancellationToken &cancellation);
 
   // Generate embeddings for multiple texts
   EmbeddingResult embed(const std::vector<std::string> &texts);
@@ -115,7 +127,10 @@ private:
   std::string model_path_;
   std::string mmproj_path_;
   std::string chat_template_;
+  bool log_prompts_ = false;
   int n_batch_ = 512; // Batch size for prompt processing
+  TokenList cached_tokens_;
+  std::mutex inference_mutex_;
 
   // Tokenize a string
   std::vector<int32_t> tokenize(const std::string &text, bool add_bos);
@@ -132,10 +147,21 @@ private:
   // Check if token is end-of-sequence
   bool is_eos_token(int32_t token);
 
+  void clear_context_memory(bool data);
+  bool is_cancelled(GenerationResult &result, const CancellationToken &cancellation) const;
+  bool trim_cached_tokens(size_t keep_tokens);
+  bool decode_tokens(const std::vector<int32_t> &tokens, size_t offset, size_t count, int start_pos,
+                     bool logits_last, GenerationResult &result, const std::string &error_message,
+                     const CancellationToken &cancellation);
+  bool sync_cached_tokens_to_text(const std::string &text);
+  PromptCacheOps create_prompt_cache_ops(GenerationResult &result,
+                                         const CancellationToken &cancellation);
+
   // Prefill the prompt into the context and return the number of consumed positions.
   bool prefill_prompt(const std::string &prompt,
                       const std::vector<std::vector<unsigned char>> &images,
-                      const GenerationParams &params, GenerationResult &result, int &n_past);
+                      const GenerationParams &params, GenerationResult &result, int &n_past,
+                      const CancellationToken &cancellation);
 };
 
 } // namespace llama_wrapper

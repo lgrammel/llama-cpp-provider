@@ -1,1 +1,1 @@
-packages/ai-sdk-llama-cpp/README.md
+packages/llama-cpp-provider/README.md

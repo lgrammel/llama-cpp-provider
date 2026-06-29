@@ -115,6 +115,15 @@ export interface LlamaCppMemorySafetyConfig {
   computeOverheadBytes?: number;
 }
 
+export interface LlamaCppCacheConfig {
+  /**
+   * Reuse matching prompt prefixes from the previous request on the same model
+   * instance. This makes the model stateful and is intended for single-threaded
+   * chat loops where each request extends the previous conversation.
+   */
+  mode?: "prefix";
+}
+
 export interface LlamaCppModelInfo {
   /**
    * Chat template to use for formatting messages.
@@ -185,4 +194,17 @@ export interface LlamaCppProviderConfig {
    * Enable verbose debug output from llama.cpp (default: false).
    */
   debug?: boolean;
+
+  /**
+   * Print the final chat-template-rendered prompt sent to llama.cpp to stderr.
+   *
+   * This may include private user data. Intended for local debugging only.
+   */
+  logPrompts?: boolean;
+
+  /**
+   * Optional prompt cache. Set to `{ mode: "prefix" }` to reuse llama.cpp KV
+   * cache state when a request starts with the previous request/response tokens.
+   */
+  cache?: LlamaCppCacheConfig;
 }

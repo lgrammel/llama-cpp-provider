@@ -1,6 +1,7 @@
 export { llamaCpp, type LlamaCppProvider } from "./llama-cpp-provider.js";
 export {
   thinkTagsReasoning,
+  type LlamaCppCacheConfig,
   type LlamaCppKvCacheLayerMemoryInfo,
   type LlamaCppMemorySafetyConfig,
   type LlamaCppModelInfo,

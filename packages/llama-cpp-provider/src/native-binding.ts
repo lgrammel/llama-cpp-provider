@@ -19,6 +19,12 @@ export interface LoadModelOptions {
   threads?: number;
   debug?: boolean;
   /**
+   * Print the final chat-template-rendered prompt sent to llama.cpp to stderr.
+   *
+   * This may include private user data. Intended for local debugging only.
+   */
+  logPrompts?: boolean;
+  /**
    * Chat template to use for formatting messages.
    * - "auto" (default): Use the template embedded in the GGUF model file
    * - Template name: Use a specific built-in template (e.g., "llama3", "chatml", "gemma")
@@ -52,12 +58,16 @@ export interface GenerateOptions {
   stopSequences?: string[];
   /** GBNF grammar string for structured output */
   grammar?: string;
+  /** Reuse matching prompt prefixes from the previous request on this model. */
+  promptCache?: boolean;
 }
 
 export interface GenerateResult {
   text: string;
   promptTokens: number;
   completionTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   finishReason: "stop" | "length" | "error";
   errorMessage?: string;
 }
@@ -88,6 +98,7 @@ interface NativeBinding {
     tokenCallback: (token: string) => void,
     doneCallback: (error: string | null, result: GenerateResult | null) => void
   ): void;
+  cancelGeneration(handle: number): boolean;
   isModelLoaded(handle: number): boolean;
   // Embedding functions
   embed(
@@ -142,6 +153,9 @@ function omitUndefinedLoadModelOptions(
   }
   if (options.debug !== undefined) {
     nativeOptions.debug = options.debug;
+  }
+  if (options.logPrompts !== undefined) {
+    nativeOptions.logPrompts = options.logPrompts;
   }
   if (options.chatTemplate !== undefined) {
     nativeOptions.chatTemplate = options.chatTemplate;
@@ -215,6 +229,10 @@ export function generate(
       }
     });
   });
+}
+
+export function cancelGeneration(handle: number): boolean {
+  return binding.cancelGeneration(handle);
 }
 
 export function generateStream(

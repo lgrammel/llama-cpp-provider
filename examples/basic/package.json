@@ -7,6 +7,7 @@
     "agent-image": "tsx src/agent-image.ts",
     "agent-reasoning": "tsx src/agent-reasoning.ts",
     "agent-tool-call": "tsx src/agent-tool-call.ts",
+    "prompt-cache": "tsx src/prompt-cache.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
