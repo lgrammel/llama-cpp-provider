@@ -1,5 +1,15 @@
 # @lgrammel/llama-cpp-provider
 
+## 0.4.0
+
+### Minor Changes
+
+- d6043d0: Add reasoning effort token budgets, OpenAI-compatible structured output provider options, streamed tool-call input parts, and chat-template thinking controls.
+
+### Patch Changes
+
+- d6043d0: Cancel active native generation when streams are cancelled or models are disposed, constrain schema-less JSON responses to JSON objects, and improve streamed tool-call parsing with hidden reasoning content.
+
 ## 0.3.0
 
 ### Minor Changes
