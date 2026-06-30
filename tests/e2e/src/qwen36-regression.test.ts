@@ -108,15 +108,25 @@ describeQwen36E2E("Qwen 3.6 E2E regressions", () => {
 
       const firstUsage = result.steps[0].usage;
       const secondUsage = result.steps[1].usage;
+      const secondCacheWriteTokens =
+        secondUsage.inputTokenDetails?.cacheWriteTokens;
+      const secondInputTokens = secondUsage.inputTokens;
 
       expect(firstUsage.inputTokenDetails?.cacheReadTokens).toBe(0);
       expect(secondUsage.inputTokenDetails?.cacheReadTokens).toBeGreaterThan(0);
-      expect(secondUsage.inputTokenDetails?.cacheWriteTokens).toBeGreaterThan(
-        0
-      );
-      expect(secondUsage.inputTokenDetails?.cacheWriteTokens).toBeLessThan(
-        secondUsage.inputTokens
-      );
+
+      if (
+        secondCacheWriteTokens === undefined ||
+        secondInputTokens === undefined
+      ) {
+        throw new Error(
+          "Expected second step usage to include input and cache write tokens"
+        );
+      }
+
+      expect(secondCacheWriteTokens).toBeGreaterThan(0);
+      expect(secondInputTokens).toBeGreaterThan(0);
+      expect(secondCacheWriteTokens).toBeLessThan(secondInputTokens);
     }
   );
 });
