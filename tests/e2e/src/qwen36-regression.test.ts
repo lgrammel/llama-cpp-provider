@@ -71,6 +71,13 @@ describeQwen36E2E("Qwen 3.6 E2E regressions", () => {
       expect(visibleText).not.toContain("<think>");
       expect(visibleText).not.toContain("</think>");
       expect(visibleText).not.toContain("<sandboxshell:cmd>");
+
+      const serializedSteps = JSON.stringify(result.steps);
+      expect(serializedSteps).not.toContain("<|im_start|>");
+      expect(serializedSteps).not.toContain("<think>");
+      expect(serializedSteps).not.toContain("</think>");
+      expect(serializedSteps).not.toContain("<tool_call>");
+      expect(serializedSteps).not.toContain("<sandboxshell:cmd>");
     }
   );
 });

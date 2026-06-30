@@ -106,6 +106,7 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 - `providerOptions["llama.cpp"].parallelToolCalls: true` must forward `parallelToolCalls: true` to native generation.
 - Native tool output parsing must use llama.cpp common-chat parser parameters produced by the applied chat template.
 - Tool output parsing must retain a compatibility fallback that accepts a single JSON object, an array of JSON objects, or a legacy `tool_calls` wrapper.
+- Tool output parsing must retain a compatibility fallback for Qwen-style XML tool-call markup, including `<tool:argument>` and `<tool_call><function=tool><parameter=argument>` forms.
 - Parsed tool calls must produce AI SDK `tool-call` content with JSON-stringified arguments.
 - Parsed tool calls must set the unified finish reason to `tool-calls`.
 - Non-JSON or invalid tool-call output must be returned as normal text.

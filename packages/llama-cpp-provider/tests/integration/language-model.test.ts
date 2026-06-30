@@ -91,6 +91,27 @@ describe("LlamaCppLanguageModel Integration", () => {
       expect(result.content[0]).toHaveProperty("text", "Mock response text");
     });
 
+    it("strips generated ChatML assistant control headers from text output", async () => {
+      vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
+        text: "<|im_start|>assistant\nHello!",
+        promptTokens: 50,
+        completionTokens: 5,
+        finishReason: "stop",
+      });
+
+      const result = await model.doGenerate({
+        prompt: testMessages,
+      });
+
+      expect(result.content).toEqual([
+        {
+          type: "text",
+          text: "Hello!",
+          providerMetadata: undefined,
+        },
+      ]);
+    });
+
     it("returns correct finish reason", async () => {
       const result = await model.doGenerate({
         prompt: testMessages,
@@ -667,6 +688,62 @@ The user asks whether ffmpeg is available. I should check with the sandbox shell
       await qwenModel.dispose();
     });
 
+    it("parses Qwen function XML tool calls even when emitted inside reasoning", async () => {
+      vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
+        text: `<|im_start|>assistant
+<think>
+<tool_call>
+<function=sandboxShellTool>
+<parameter=command>
+which ffmpeg && ffmpeg -version
+</parameter>
+</function>
+</tool_call>`,
+        promptTokens: 50,
+        completionTokens: 42,
+        finishReason: "stop",
+      });
+
+      const qwenModel = new LlamaCppLanguageModel({
+        modelPath: "/test/qwen3.6.gguf",
+        reasoning: qwen3_6_dense.reasoning,
+      });
+
+      const result = await qwenModel.doGenerate({
+        prompt: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "does the sandbox support ffmpeg?" },
+            ],
+          },
+        ],
+        tools: [
+          {
+            type: "function",
+            name: "sandboxShellTool",
+            inputSchema: {
+              type: "object",
+              properties: { command: { type: "string" } },
+              required: ["command"],
+            },
+          },
+        ],
+      });
+
+      expect(result.content).toEqual([
+        {
+          type: "tool-call",
+          toolCallId: expect.any(String),
+          toolName: "sandboxShellTool",
+          input: '{"command":"which ffmpeg && ffmpeg -version"}',
+        },
+      ]);
+      expect(result.finishReason.unified).toBe("tool-calls");
+
+      await qwenModel.dispose();
+    });
+
     it("does not inject reasoning prompt when constrained by JSON grammar", async () => {
       const reasoningModel = new LlamaCppLanguageModel({
         modelPath: "/test/model.gguf",
@@ -1004,6 +1081,33 @@ The user asks whether ffmpeg is available. I should check with the sandbox shell
       expect(textDeltas[1]).toHaveProperty("delta", " ");
       expect(textDeltas[2]).toHaveProperty("delta", "world");
       expect(textDeltas[3]).toHaveProperty("delta", "!");
+    });
+
+    it("strips streamed ChatML assistant control headers before text output", async () => {
+      vi.mocked(nativeBinding.generateStream).mockImplementationOnce(
+        (handle, opts, onToken) => {
+          onToken("<|im_");
+          onToken("start|>assistant\n");
+          onToken("Hello");
+          return Promise.resolve({
+            text: "<|im_start|>assistant\nHello",
+            promptTokens: 30,
+            completionTokens: 3,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 30,
+            finishReason: "stop",
+          });
+        }
+      );
+
+      const { stream } = await model.doStream({
+        prompt: testMessages,
+      });
+
+      const parts = await collectStreamParts(stream);
+      const textDeltas = parts.filter((p) => p.type === "text-delta");
+
+      expect(textDeltas.map((p) => p.delta).join("")).toBe("Hello");
     });
 
     it("emits text-end after all text-deltas", async () => {
@@ -2318,6 +2422,75 @@ The user asks whether ffmpeg is available. I should check with the sandbox shell
       expect(finishPart?.finishReason.unified).toBe("tool-calls");
 
       await reasoningModel.dispose();
+    });
+
+    it("streams Qwen function XML tool calls inside reasoning as tool calls", async () => {
+      const generatedText = `<|im_start|>assistant
+<think>
+<tool_call>
+<function=sandboxShellTool>
+<parameter=command>
+which ffmpeg && ffmpeg -version
+</parameter>
+</function>
+</tool_call>`;
+
+      vi.mocked(nativeBinding.generateStream).mockImplementationOnce(
+        (handle, opts, onToken) => {
+          onToken("<|im_start|>assistant\n<think>\n");
+          onToken("<tool_call>\n<function=sandboxShellTool>\n");
+          onToken("<parameter=command>\nwhich ffmpeg && ffmpeg -version\n");
+          onToken("</parameter>\n</function>\n</tool_call>");
+          return Promise.resolve({
+            text: generatedText,
+            promptTokens: 50,
+            completionTokens: 42,
+            finishReason: "stop",
+          });
+        }
+      );
+
+      const qwenModel = new LlamaCppLanguageModel({
+        modelPath: "/test/qwen3.6.gguf",
+        reasoning: qwen3_6_dense.reasoning,
+      });
+
+      const { stream } = await qwenModel.doStream({
+        prompt: testMessages,
+        tools: [
+          {
+            type: "function",
+            name: "sandboxShellTool",
+            inputSchema: {
+              type: "object",
+              properties: { command: { type: "string" } },
+              required: ["command"],
+            },
+          },
+        ],
+      });
+
+      const parts = await collectStreamParts(stream);
+      const reasoningDeltas = parts.filter((p) => p.type === "reasoning-delta");
+      const textDeltas = parts.filter((p) => p.type === "text-delta");
+      const toolInputDelta = parts.find((p) => p.type === "tool-input-delta");
+      const toolCallPart = parts.find((p) => p.type === "tool-call");
+      const finishPart = parts.find((p) => p.type === "finish");
+
+      expect(reasoningDeltas).toHaveLength(0);
+      expect(textDeltas).toHaveLength(0);
+      expect(toolInputDelta?.delta).toBe(
+        '{"command":"which ffmpeg && ffmpeg -version"}'
+      );
+      expect(toolCallPart).toEqual({
+        type: "tool-call",
+        toolCallId: expect.any(String),
+        toolName: "sandboxShellTool",
+        input: '{"command":"which ffmpeg && ffmpeg -version"}',
+      });
+      expect(finishPart?.finishReason.unified).toBe("tool-calls");
+
+      await qwenModel.dispose();
     });
 
     it("preserves streamed tool-call JSON in later cached prompts", async () => {

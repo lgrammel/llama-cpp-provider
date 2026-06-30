@@ -424,6 +424,50 @@ function createReasoningTokenProcessor(
   };
 }
 
+function createGeneratedControlTokenProcessor(
+  emitText: (text: string) => void
+): { push: (token: string) => void; flush: () => void } {
+  const assistantHeader = "<|im_start|>assistant";
+  let pending = "";
+  let headerResolved = false;
+
+  const process = (force: boolean) => {
+    if (headerResolved) {
+      if (pending.length > 0) {
+        emitText(pending);
+        pending = "";
+      }
+      return;
+    }
+
+    const trimmedStart = pending.trimStart();
+
+    if (trimmedStart.startsWith(assistantHeader)) {
+      pending = trimmedStart.slice(assistantHeader.length).replace(/^\s+/, "");
+      headerResolved = true;
+      process(force);
+      return;
+    }
+
+    if (!force && assistantHeader.startsWith(trimmedStart)) {
+      return;
+    }
+
+    headerResolved = true;
+    process(force);
+  };
+
+  return {
+    push(token: string) {
+      pending += token;
+      process(false);
+    },
+    flush() {
+      process(true);
+    },
+  };
+}
+
 export function convertFinishReason(
   reason: string
 ): LanguageModelV4FinishReason {
@@ -476,6 +520,16 @@ export interface ParsedToolCall {
   arguments: Record<string, unknown>;
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripGeneratedControlTokens(text: string): string {
+  return text
+    .replace(/^(?:\s*<\|im_start\|>assistant\s*)+/g, "")
+    .replace(/(?:\s*<\|im_end\|>\s*)+$/g, "");
+}
+
 function parseNamespacedXmlToolCalls(text: string): ParsedToolCall[] | null {
   const toolCalls: ParsedToolCall[] = [];
   const tagPattern =
@@ -497,6 +551,71 @@ function parseNamespacedXmlToolCalls(text: string): ParsedToolCall[] | null {
   }
 
   return toolCalls.length > 0 ? toolCalls : null;
+}
+
+function parseFunctionXmlToolCalls(text: string): ParsedToolCall[] | null {
+  const toolCalls: ParsedToolCall[] = [];
+  const toolCallPattern =
+    /<tool_call>\s*<function=([A-Za-z_][\w.-]*)>\s*([\s\S]*?)<\/function>\s*<\/tool_call>/g;
+  const parameterPattern =
+    /<parameter=([A-Za-z_][\w.-]*)>([\s\S]*?)<\/parameter>/g;
+
+  for (const match of text.matchAll(toolCallPattern)) {
+    const [, name, parametersText] = match;
+    if (!name || parametersText === undefined) {
+      continue;
+    }
+
+    const args: Record<string, unknown> = {};
+    for (const parameterMatch of parametersText.matchAll(parameterPattern)) {
+      const [, parameterName, parameterValue] = parameterMatch;
+      if (!parameterName || parameterValue === undefined) {
+        continue;
+      }
+      args[parameterName] = parameterValue.trim();
+    }
+
+    if (Object.keys(args).length > 0) {
+      toolCalls.push({
+        id: generateToolCallId(),
+        name,
+        arguments: args,
+      });
+    }
+  }
+
+  return toolCalls.length > 0 ? toolCalls : null;
+}
+
+function parseXmlToolCalls(text: string): ParsedToolCall[] | null {
+  const toolCalls = [
+    ...(parseNamespacedXmlToolCalls(text) ?? []),
+    ...(parseFunctionXmlToolCalls(text) ?? []),
+  ];
+
+  return toolCalls.length > 0 ? toolCalls : null;
+}
+
+function stripParsedToolCallMarkup(
+  text: string,
+  reasoning?: Pick<ResolvedReasoningConfig, "opening" | "closing">
+): string {
+  let stripped = text
+    .replace(
+      /<tool_call>\s*<function=[A-Za-z_][\w.-]*>\s*[\s\S]*?<\/function>\s*<\/tool_call>/g,
+      ""
+    )
+    .replace(/<([A-Za-z_][\w.-]*):([A-Za-z_][\w.-]*)>[\s\S]*?<\/\1:\2>/g, "");
+
+  if (reasoning) {
+    const opening = escapeRegExp(reasoning.opening);
+    const closing = escapeRegExp(reasoning.closing);
+    stripped = stripped
+      .replace(new RegExp(`${opening}\\s*${closing}`, "g"), "")
+      .replace(new RegExp(`${opening}\\s*$`), "");
+  }
+
+  return stripGeneratedControlTokens(stripped);
 }
 
 function stringifyToolArguments(input: unknown): string {
@@ -1008,11 +1127,12 @@ export function generateToolCallGrammar(
  */
 export function parseToolCalls(text: string): ParsedToolCall[] | null {
   try {
-    const trimmed = text.trim();
+    const normalized = stripGeneratedControlTokens(text);
+    const trimmed = normalized.trim();
 
     // Must start with { or [ to be JSON
     if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
-      return parseNamespacedXmlToolCalls(trimmed);
+      return parseXmlToolCalls(trimmed);
     }
 
     const parsed = JSON.parse(trimmed);
@@ -1068,7 +1188,7 @@ export function parseToolCalls(text: string): ParsedToolCall[] | null {
 
     return null;
   } catch {
-    return parseNamespacedXmlToolCalls(text);
+    return parseXmlToolCalls(stripGeneratedControlTokens(text));
   }
 }
 
@@ -1512,16 +1632,27 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       options.abortSignal,
       () => generate(handle, generateOptions)
     );
+    const generatedText = stripGeneratedControlTokens(result.text);
+    const initialParsedContent = reasoningConfig
+      ? splitReasoningContent(generatedText, reasoningConfig)
+      : [{ type: "text" as const, text: generatedText }];
+    const visibleText = getVisibleText(initialParsedContent);
+    const nativeToolCalls = result.toolCalls;
+    const fallbackToolCalls =
+      toolSettings.parseToolCalls && !nativeToolCalls?.length
+        ? (parseToolCalls(visibleText) ?? parseToolCalls(generatedText))
+        : undefined;
+    const contentText = fallbackToolCalls?.length
+      ? stripParsedToolCallMarkup(generatedText, reasoningConfig)
+      : generatedText;
     const parsedContent = reasoningConfig
-      ? splitReasoningContent(result.text, reasoningConfig)
-      : [{ type: "text" as const, text: result.text }];
-    const visibleText = getVisibleText(parsedContent);
+      ? splitReasoningContent(contentText, reasoningConfig)
+      : [{ type: "text" as const, text: contentText }];
 
     const warnings: SharedV4Warning[] = [];
     const content: LanguageModelV4Content[] = [];
     let finishReason = convertFinishReason(result.finishReason);
 
-    const nativeToolCalls = result.toolCalls;
     if (nativeToolCalls && nativeToolCalls.length > 0) {
       appendParsedContent(content, parsedContent);
 
@@ -1540,7 +1671,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
         raw: "tool-calls",
       };
     } else if (toolSettings.parseToolCalls) {
-      const toolCalls = parseToolCalls(visibleText);
+      const toolCalls = fallbackToolCalls;
 
       if (toolCalls && toolCalls.length > 0) {
         appendParsedContent(content, parsedContent, { includeText: false });
@@ -1753,6 +1884,15 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
                 endReasoning
               )
             : undefined;
+          const controlTokenProcessor = createGeneratedControlTokenProcessor(
+            (token) => {
+              if (reasoningProcessor) {
+                reasoningProcessor.push(token);
+              } else {
+                emitTextDelta(token);
+              }
+            }
+          );
 
           const result = await this.runWithAbortSignal(
             handle,
@@ -1767,11 +1907,9 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
                 if (toolSettings.parseToolCalls) {
                   toolInputStreamer?.push(token);
                   return;
-                } else if (reasoningProcessor) {
-                  reasoningProcessor.push(token);
-                } else {
-                  emitTextDelta(token);
                 }
+
+                controlTokenProcessor.push(token);
               })
           );
 
@@ -1779,27 +1917,40 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
             return;
           }
 
+          if (!toolSettings.parseToolCalls) {
+            controlTokenProcessor.flush();
+          }
           reasoningProcessor?.flush();
 
           // Check for tool calls if tools were provided
           let finishReason = convertFinishReason(result.finishReason);
 
           if (toolSettings.parseToolCalls) {
-            const parsedText = result.text;
+            const generatedText = stripGeneratedControlTokens(result.text);
+            const initialParsedContent = reasoningConfig
+              ? splitReasoningContent(generatedText, reasoningConfig)
+              : [{ type: "text" as const, text: generatedText }];
+            const visibleText = getVisibleText(initialParsedContent);
             const parsedContent = reasoningConfig
-              ? splitReasoningContent(parsedText, reasoningConfig)
-              : [{ type: "text" as const, text: parsedText }];
-            const visibleText = getVisibleText(parsedContent);
+              ? splitReasoningContent(generatedText, reasoningConfig)
+              : [{ type: "text" as const, text: generatedText }];
             const nativeToolCalls = result.toolCalls;
             const fallbackToolCalls = nativeToolCalls?.length
               ? undefined
-              : parseToolCalls(visibleText);
+              : (parseToolCalls(visibleText) ?? parseToolCalls(generatedText));
             const toolCalls = nativeToolCalls?.length
               ? nativeToolCalls
               : fallbackToolCalls;
 
             if (toolCalls && toolCalls.length > 0) {
-              emitParsedContent(parsedContent, {
+              const contentText = fallbackToolCalls?.length
+                ? stripParsedToolCallMarkup(generatedText, reasoningConfig)
+                : generatedText;
+              const contentParts = reasoningConfig
+                ? splitReasoningContent(contentText, reasoningConfig)
+                : [{ type: "text" as const, text: contentText }];
+
+              emitParsedContent(contentParts, {
                 includeText:
                   nativeToolCalls !== undefined && nativeToolCalls.length > 0,
               });
@@ -1832,7 +1983,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
                 unified: "tool-calls",
                 raw: "tool-calls",
               };
-            } else if (parsedText.length > 0) {
+            } else if (generatedText.length > 0) {
               emitParsedContent(parsedContent);
             }
           }

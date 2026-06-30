@@ -265,6 +265,27 @@ Need to check the sandbox.
         cmd: "which ffmpeg && ffmpeg -version",
       });
     });
+
+    it("parses Qwen-style function XML tool calls inside generated reasoning", () => {
+      const text = `<|im_start|>assistant
+<think>
+<tool_call>
+<function=sandboxShellTool>
+<parameter=command>
+which ffmpeg && ffmpeg -version
+</parameter>
+</function>
+</tool_call>`;
+
+      const result = parseToolCalls(text);
+
+      expect(result).not.toBeNull();
+      expect(result).toHaveLength(1);
+      expect(result![0].name).toBe("sandboxShellTool");
+      expect(result![0].arguments).toEqual({
+        command: "which ffmpeg && ffmpeg -version",
+      });
+    });
   });
 
   describe("buildToolSystemPrompt", () => {
