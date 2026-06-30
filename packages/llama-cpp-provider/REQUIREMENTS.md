@@ -125,6 +125,8 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 - Resolved reasoning budgets must be passed to native generation with the configured reasoning start and end markers.
 - Reasoning extraction must be disabled when no model reasoning config is set and the call does not request reasoning.
 - `reasoning: "none"` in a call must disable reasoning extraction.
+- Native generation must receive `enableThinking: false` when a call uses `reasoning: "none"` and `enableThinking: true` for omitted or non-`"none"` reasoning values.
+- llama.cpp chat templates that support `enable_thinking` must receive the native `enableThinking` value.
 - When a reasoning prompt prefix is configured, it must be inserted into the first system message or prepended as a new system message.
 - Reasoning extraction must operate on tool-call visible text so hidden reasoning does not prevent tool-call parsing.
 

@@ -1446,6 +1446,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       topK: options.topK ?? DEFAULT_TOP_K,
       stopSequences: options.stopSequences,
       grammar: responseGrammar,
+      enableThinking: options.reasoning !== "none",
     };
 
     if (reasoningConfig?.budgetTokens !== undefined) {

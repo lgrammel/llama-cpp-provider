@@ -66,6 +66,7 @@ struct GenerationParams {
   int32_t reasoning_budget_tokens = -1;
   std::string reasoning_budget_start;
   std::string reasoning_budget_end;
+  bool enable_thinking = true;
   bool prompt_cache = false;
   std::vector<ToolDefinition> tools;
   std::string tool_choice = "auto";

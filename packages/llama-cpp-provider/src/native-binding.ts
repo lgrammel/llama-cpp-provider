@@ -85,6 +85,8 @@ export interface GenerateOptions {
   reasoningBudgetStart?: string;
   /** Marker that ends model reasoning content. */
   reasoningBudgetEnd?: string;
+  /** Whether chat templates that support thinking should enable thinking. */
+  enableThinking?: boolean;
   /** Reuse matching prompt prefixes from the previous request on this model. */
   promptCache?: boolean;
 }

@@ -144,6 +144,7 @@ describe("LlamaCppLanguageModel Integration", () => {
       expect(result.request).toHaveProperty("body");
       expect(result.request!.body).toHaveProperty("messages");
       expect(result.request!.body).toHaveProperty("maxTokens", 256);
+      expect(result.request!.body).toHaveProperty("enableThinking", true);
     });
 
     it("applies default maxTokens when not specified", async () => {
@@ -434,6 +435,12 @@ describe("LlamaCppLanguageModel Integration", () => {
           providerMetadata: undefined,
         },
       ]);
+      expect(nativeBinding.generate).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          enableThinking: false,
+        })
+      );
     });
 
     it('enables reasoning extraction for non-"none" reasoning values', async () => {
@@ -461,6 +468,12 @@ describe("LlamaCppLanguageModel Integration", () => {
           providerMetadata: undefined,
         },
       ]);
+      expect(nativeBinding.generate).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          enableThinking: true,
+        })
+      );
     });
 
     it("passes mapped reasoning effort budget to native generation", async () => {
@@ -486,6 +499,7 @@ describe("LlamaCppLanguageModel Integration", () => {
             { role: "system", content: "<|think|>\n" },
             { role: "user", content: "Hello, how are you?" },
           ],
+          enableThinking: true,
           reasoningBudgetTokens: 4096,
           reasoningBudgetStart: "<think>",
           reasoningBudgetEnd: "</think>",
@@ -515,6 +529,7 @@ describe("LlamaCppLanguageModel Integration", () => {
           reasoningBudgetTokens: 1024,
           reasoningBudgetStart: "<think>",
           reasoningBudgetEnd: "</think>",
+          enableThinking: true,
         })
       );
 
@@ -862,6 +877,7 @@ describe("LlamaCppLanguageModel Integration", () => {
           reasoningBudgetTokens: 2048,
           reasoningBudgetStart: "<|channel>thought\n",
           reasoningBudgetEnd: "<channel|>",
+          enableThinking: true,
         }),
         expect.any(Function)
       );

@@ -298,6 +298,33 @@ std::string LlamaModel::apply_chat_template(const std::vector<ChatMessage> &mess
   return std::string(buffer.data(), result_size);
 }
 
+static bool apply_common_chat_template_if_supported(common_chat_templates *chat_templates,
+                                                    const std::vector<common_chat_msg> &messages,
+                                                    const GenerationParams &params,
+                                                    std::string &prompt) {
+  if (!chat_templates) {
+    return false;
+  }
+
+  try {
+    if (!common_chat_templates_support_enable_thinking(chat_templates)) {
+      return false;
+    }
+
+    common_chat_templates_inputs inputs;
+    inputs.messages = messages;
+    inputs.use_jinja = true;
+    inputs.add_generation_prompt = true;
+    inputs.reasoning_format = COMMON_REASONING_FORMAT_NONE;
+    inputs.enable_thinking = params.enable_thinking;
+
+    prompt = common_chat_templates_apply(chat_templates, inputs).prompt;
+    return !prompt.empty();
+  } catch (const std::exception &) {
+    return false;
+  }
+}
+
 bool LlamaModel::ensure_chat_templates(GenerationResult &result) {
   if (chat_templates_) {
     return true;
@@ -381,7 +408,16 @@ bool LlamaModel::prepare_prompt(const std::vector<ChatMessage> &messages,
   effective_params = params;
   parse_tool_calls = false;
 
+  const std::vector<common_chat_msg> common_messages = to_common_chat_messages(messages);
+
   if (params.tools.empty()) {
+    if (!ensure_chat_templates(result)) {
+      return false;
+    }
+    if (apply_common_chat_template_if_supported(chat_templates_.get(), common_messages, params,
+                                                prompt)) {
+      return true;
+    }
     prompt = apply_chat_template(messages);
     return !prompt.empty();
   }
@@ -396,13 +432,14 @@ bool LlamaModel::prepare_prompt(const std::vector<ChatMessage> &messages,
   }
 
   common_chat_templates_inputs inputs;
-  inputs.messages = to_common_chat_messages(messages);
+  inputs.messages = common_messages;
   inputs.tools = to_common_chat_tools(params.tools);
   inputs.tool_choice = parse_tool_choice(params.tool_choice);
   inputs.parallel_tool_calls = params.parallel_tool_calls;
   inputs.use_jinja = true;
   inputs.add_generation_prompt = true;
   inputs.reasoning_format = COMMON_REASONING_FORMAT_NONE;
+  inputs.enable_thinking = params.enable_thinking;
 
   try {
     common_chat_params chat_params = common_chat_templates_apply(chat_templates_.get(), inputs);

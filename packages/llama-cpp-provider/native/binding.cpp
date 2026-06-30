@@ -564,6 +564,10 @@ void ParseGenerationReasoningOptions(Napi::Object options,
   if (options.Has("reasoningBudgetEnd") && options.Get("reasoningBudgetEnd").IsString()) {
     params.reasoning_budget_end = options.Get("reasoningBudgetEnd").As<Napi::String>().Utf8Value();
   }
+
+  if (options.Has("enableThinking") && options.Get("enableThinking").IsBoolean()) {
+    params.enable_thinking = options.Get("enableThinking").As<Napi::Boolean>().Value();
+  }
 }
 
 Napi::Value Generate(const Napi::CallbackInfo &info) {
