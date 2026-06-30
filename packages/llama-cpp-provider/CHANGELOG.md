@@ -1,5 +1,11 @@
 # @lgrammel/llama-cpp-provider
 
+## 0.4.2
+
+### Patch Changes
+
+- d4c8034: Strip leaked ChatML assistant headers and parse Qwen XML tool calls even when generated inside reasoning blocks.
+
 ## 0.4.1
 
 ### Patch Changes
