@@ -1,3 +1,10 @@
+import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
+
+export type LlamaCppReasoningEffort = Exclude<
+  NonNullable<LanguageModelV4CallOptions["reasoning"]>,
+  "none"
+>;
+
 export interface LlamaCppReasoningConfig {
   /**
    * Opening marker that starts reasoning content.
@@ -14,6 +21,14 @@ export interface LlamaCppReasoningConfig {
    * Set to false to disable prompt injection.
    */
   promptPrefix?: string | false;
+  /**
+   * Map AI SDK reasoning effort values to a llama.cpp reasoning token budget.
+   *
+   * `provider-default` applies when the call omits `reasoning` or explicitly
+   * passes `"provider-default"`. Omit an effort to leave that effort
+   * unrestricted.
+  */
+  effortTokenBudget?: Partial<Record<LlamaCppReasoningEffort, number>>;
 }
 
 export const thinkTagsReasoning: LlamaCppReasoningConfig = {

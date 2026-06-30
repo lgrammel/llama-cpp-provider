@@ -549,6 +549,22 @@ void ParseGenerationToolOptions(Napi::Object options, llama_wrapper::GenerationP
   }
 }
 
+void ParseGenerationReasoningOptions(Napi::Object options, llama_wrapper::GenerationParams &params) {
+  if (options.Has("reasoningBudgetTokens") && options.Get("reasoningBudgetTokens").IsNumber()) {
+    params.reasoning_budget_tokens =
+        options.Get("reasoningBudgetTokens").As<Napi::Number>().Int32Value();
+  }
+
+  if (options.Has("reasoningBudgetStart") && options.Get("reasoningBudgetStart").IsString()) {
+    params.reasoning_budget_start =
+        options.Get("reasoningBudgetStart").As<Napi::String>().Utf8Value();
+  }
+
+  if (options.Has("reasoningBudgetEnd") && options.Get("reasoningBudgetEnd").IsString()) {
+    params.reasoning_budget_end = options.Get("reasoningBudgetEnd").As<Napi::String>().Utf8Value();
+  }
+}
+
 Napi::Value Generate(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
@@ -595,6 +611,7 @@ Napi::Value Generate(const Napi::CallbackInfo &info) {
     params.grammar = options.Get("grammar").As<Napi::String>().Utf8Value();
   }
   ParseGenerationToolOptions(options, params);
+  ParseGenerationReasoningOptions(options, params);
   params.prompt_cache =
       options.Has("promptCache") ? options.Get("promptCache").As<Napi::Boolean>().Value() : false;
 
@@ -657,6 +674,7 @@ Napi::Value GenerateStream(const Napi::CallbackInfo &info) {
     params.grammar = options.Get("grammar").As<Napi::String>().Utf8Value();
   }
   ParseGenerationToolOptions(options, params);
+  ParseGenerationReasoningOptions(options, params);
   params.prompt_cache =
       options.Has("promptCache") ? options.Get("promptCache").As<Napi::Boolean>().Value() : false;
 

@@ -463,6 +463,64 @@ describe("LlamaCppLanguageModel Integration", () => {
       ]);
     });
 
+    it("passes mapped reasoning effort budget to native generation", async () => {
+      const reasoningModel = new LlamaCppLanguageModel({
+        modelPath: "/test/model.gguf",
+        reasoning: {
+          promptPrefix: "<|think|>\n",
+          effortTokenBudget: {
+            high: 4096,
+          },
+        },
+      });
+
+      await reasoningModel.doGenerate({
+        prompt: testMessages,
+        reasoning: "high",
+      });
+
+      expect(nativeBinding.generate).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          messages: [
+            { role: "system", content: "<|think|>\n" },
+            { role: "user", content: "Hello, how are you?" },
+          ],
+          reasoningBudgetTokens: 4096,
+          reasoningBudgetStart: "<think>",
+          reasoningBudgetEnd: "</think>",
+        })
+      );
+
+      await reasoningModel.dispose();
+    });
+
+    it("uses provider-default reasoning budget when call reasoning is omitted", async () => {
+      const reasoningModel = new LlamaCppLanguageModel({
+        modelPath: "/test/model.gguf",
+        reasoning: {
+          effortTokenBudget: {
+            "provider-default": 1024,
+          },
+        },
+      });
+
+      await reasoningModel.doGenerate({
+        prompt: testMessages,
+      });
+
+      expect(nativeBinding.generate).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          reasoningBudgetTokens: 1024,
+          reasoningBudgetStart: "<think>",
+          reasoningBudgetEnd: "</think>",
+        })
+      );
+
+      await reasoningModel.dispose();
+    });
+
     it("returns Gemma 4 thinking as reasoning content", async () => {
       vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
         text: "<|channel>thought\nI should answer briefly.<channel|>Hello!",
@@ -623,6 +681,39 @@ describe("LlamaCppLanguageModel Integration", () => {
         }),
         expect.any(Function)
       );
+    });
+
+    it("passes mapped reasoning effort budget to native stream generation", async () => {
+      const reasoningModel = new LlamaCppLanguageModel({
+        modelPath: "/test/model.gguf",
+        reasoning: {
+          openingMarker: "<|channel>thought\n",
+          closingMarker: "<channel|>",
+          promptPrefix: "<|think|>\n",
+          effortTokenBudget: {
+            medium: 2048,
+          },
+        },
+      });
+
+      const result = await reasoningModel.doStream({
+        prompt: testMessages,
+        reasoning: "medium",
+      });
+
+      await collectStreamParts(result.stream);
+
+      expect(nativeBinding.generateStream).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          reasoningBudgetTokens: 2048,
+          reasoningBudgetStart: "<|channel>thought\n",
+          reasoningBudgetEnd: "<channel|>",
+        }),
+        expect.any(Function)
+      );
+
+      await reasoningModel.dispose();
     });
 
     it("constrains streamed JSON response format without schema to a JSON object", async () => {

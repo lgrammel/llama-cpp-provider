@@ -184,6 +184,51 @@ describe("resolveReasoningConfig", () => {
       promptPrefix: "think first\n",
     });
   });
+
+  it("maps reasoning effort to token budget", () => {
+    const result = resolveReasoningConfig(
+      {
+        effortTokenBudget: {
+          high: 4096,
+        },
+      },
+      "high"
+    );
+
+    expect(result).toEqual({
+      opening: "<think>",
+      closing: "</think>",
+      promptPrefix: undefined,
+      budgetTokens: 4096,
+    });
+  });
+
+  it("uses provider-default budget for default reasoning effort", () => {
+    const result = resolveReasoningConfig({
+      effortTokenBudget: {
+        "provider-default": 1024,
+      },
+    });
+
+    expect(result).toMatchObject({
+      budgetTokens: 1024,
+    });
+  });
+
+  it("rejects invalid reasoning token budgets", () => {
+    expect(() =>
+      resolveReasoningConfig(
+        {
+          effortTokenBudget: {
+            high: 1.5,
+          },
+        },
+        "high"
+      )
+    ).toThrow(
+      'reasoning effort "high" maps to invalid token budget 1.5; expected a non-negative integer'
+    );
+  });
 });
 
 describe("splitReasoningContent", () => {

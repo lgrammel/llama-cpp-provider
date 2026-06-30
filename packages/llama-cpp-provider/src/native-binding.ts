@@ -79,6 +79,12 @@ export interface GenerateOptions {
   stopSequences?: string[];
   /** GBNF grammar string for structured output */
   grammar?: string;
+  /** Maximum generated tokens allowed inside the reasoning block. */
+  reasoningBudgetTokens?: number;
+  /** Marker that starts model reasoning content. */
+  reasoningBudgetStart?: string;
+  /** Marker that ends model reasoning content. */
+  reasoningBudgetEnd?: string;
   /** Reuse matching prompt prefixes from the previous request on this model. */
   promptCache?: boolean;
 }

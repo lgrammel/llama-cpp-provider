@@ -2,6 +2,7 @@
 #include "llama.h"
 #include "mtmd-helper.h"
 #include "mtmd.h"
+#include "reasoning-budget.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -467,6 +468,20 @@ void LlamaModel::create_sampler(const GenerationParams &params) {
     }
   }
 
+  if (params.reasoning_budget_tokens >= 0 && !params.reasoning_budget_start.empty() &&
+      !params.reasoning_budget_end.empty()) {
+    const llama_vocab *vocab = llama_model_get_vocab(model_);
+    const std::vector<int32_t> start_tokens = tokenize(params.reasoning_budget_start, false);
+    const std::vector<int32_t> end_tokens = tokenize(params.reasoning_budget_end, false);
+    const std::vector<int32_t> forced_tokens = end_tokens;
+
+    llama_sampler *reasoning_budget_sampler = common_reasoning_budget_init(
+        vocab, start_tokens, end_tokens, forced_tokens, params.reasoning_budget_tokens);
+    if (reasoning_budget_sampler) {
+      llama_sampler_chain_add(sampler_, reasoning_budget_sampler);
+    }
+  }
+
   // Add samplers to the chain
   llama_sampler_chain_add(sampler_, llama_sampler_init_top_k(params.top_k));
   llama_sampler_chain_add(sampler_, llama_sampler_init_top_p(params.top_p, 1));
@@ -856,6 +871,8 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
       break;
     }
 
+    llama_sampler_accept(sampler_, new_token);
+
     // Convert token to string
     std::string token_str = detokenize(new_token);
     generated_text += token_str;
@@ -991,6 +1008,8 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
       result.finish_reason = "stop";
       break;
     }
+
+    llama_sampler_accept(sampler_, new_token);
 
     // Convert token to string
     std::string token_str = detokenize(new_token);

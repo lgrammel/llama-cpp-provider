@@ -38,6 +38,7 @@ import {
   type LlamaCppCacheConfig,
   type LlamaCppMemorySafetyConfig,
   type LlamaCppModelMemoryInfo,
+  type LlamaCppReasoningEffort,
   type LlamaCppReasoningConfig,
 } from "./llama-cpp-provider-config.js";
 import { checkMemorySafety } from "./memory-estimation.js";
@@ -104,6 +105,7 @@ interface ResolvedReasoningConfig {
   opening: string;
   closing: string;
   promptPrefix?: string;
+  budgetTokens?: number;
 }
 
 const mediaMarker = "<__media__>";
@@ -195,7 +197,8 @@ export interface ParsedReasoningPart {
 }
 
 export function resolveReasoningConfig(
-  reasoning?: LlamaCppReasoningConfig
+  reasoning?: LlamaCppReasoningConfig,
+  effort: LlamaCppReasoningEffort = "provider-default"
 ): ResolvedReasoningConfig | undefined {
   if (!reasoning) {
     return undefined;
@@ -203,12 +206,23 @@ export function resolveReasoningConfig(
 
   const config = reasoning;
   const defaultConfig = thinkTagsReasoning;
+  const budgetTokens = config.effortTokenBudget?.[effort];
+
+  if (
+    budgetTokens !== undefined &&
+    (!Number.isInteger(budgetTokens) || budgetTokens < 0)
+  ) {
+    throw new Error(
+      `reasoning effort "${effort}" maps to invalid token budget ${budgetTokens}; expected a non-negative integer`
+    );
+  }
 
   return {
     opening: config.openingMarker ?? defaultConfig.openingMarker!,
     closing: config.closingMarker ?? defaultConfig.closingMarker!,
     promptPrefix:
       config.promptPrefix === false ? undefined : config.promptPrefix,
+    ...(budgetTokens !== undefined ? { budgetTokens } : {}),
   };
 }
 
@@ -221,13 +235,16 @@ function resolveCallReasoningConfig(
     return undefined;
   }
 
+  const effort = (options.reasoning ??
+    "provider-default") as LlamaCppReasoningEffort;
+
   if (modelReasoning) {
-    return resolveReasoningConfig(modelReasoning);
+    return resolveReasoningConfig(modelReasoning, effort);
   }
 
   return options.reasoning === undefined
     ? undefined
-    : resolveReasoningConfig({});
+    : resolveReasoningConfig({}, effort);
 }
 
 export function splitReasoningContent(
@@ -1042,6 +1059,11 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       stopSequences: options.stopSequences,
       grammar,
     };
+    if (reasoningConfig?.budgetTokens !== undefined) {
+      generateOptions.reasoningBudgetTokens = reasoningConfig.budgetTokens;
+      generateOptions.reasoningBudgetStart = reasoningConfig.opening;
+      generateOptions.reasoningBudgetEnd = reasoningConfig.closing;
+    }
     if (options.seed !== undefined) {
       validateGenerationSeed(options.seed);
       generateOptions.seed = options.seed;
@@ -1179,6 +1201,11 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       stopSequences: options.stopSequences,
       grammar,
     };
+    if (reasoningConfig?.budgetTokens !== undefined) {
+      generateOptions.reasoningBudgetTokens = reasoningConfig.budgetTokens;
+      generateOptions.reasoningBudgetStart = reasoningConfig.opening;
+      generateOptions.reasoningBudgetEnd = reasoningConfig.closing;
+    }
     if (options.seed !== undefined) {
       validateGenerationSeed(options.seed);
       generateOptions.seed = options.seed;

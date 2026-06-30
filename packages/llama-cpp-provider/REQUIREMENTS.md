@@ -112,6 +112,9 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 - Reasoning extraction must split generated text into AI SDK reasoning and text parts.
 - The default reasoning markers must be `<think>` and `</think>`.
 - Model-specific reasoning markers and prompt prefixes must be configurable.
+- Model-specific reasoning configs may map AI SDK reasoning effort values to llama.cpp reasoning token budgets.
+- When call reasoning is omitted, the reasoning budget map must use the `provider-default` effort value.
+- Resolved reasoning budgets must be passed to native generation with the configured reasoning start and end markers.
 - Reasoning extraction must be disabled when no model reasoning config is set and the call does not request reasoning.
 - `reasoning: "none"` in a call must disable reasoning extraction.
 - When a reasoning prompt prefix is configured, it must be inserted into the first system message or prepended as a new system message.
