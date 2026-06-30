@@ -488,6 +488,18 @@ function resolveParallelToolCalls(
   return llamaCppOptions?.parallelToolCalls === true;
 }
 
+function resolveResponseGrammar(
+  responseFormat: LanguageModelV4CallOptions["responseFormat"]
+): string | undefined {
+  if (responseFormat?.type !== "json") {
+    return undefined;
+  }
+
+  return convertJsonSchemaToGrammar(
+    (responseFormat.schema ?? { type: "object" }) as JSONSchema7
+  );
+}
+
 /**
  * Generate a GBNF grammar for tool calls based on the provided tool definitions.
  * This grammar constrains the model to produce valid JSON tool calls.
@@ -987,16 +999,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   ): Promise<LanguageModelV4GenerateResult> {
     throwIfAborted(options.abortSignal);
     const handle = await this.ensureModelLoaded();
-    // Convert JSON schema to GBNF grammar if structured output is requested
-    let responseGrammar: string | undefined;
-    if (
-      options.responseFormat?.type === "json" &&
-      options.responseFormat.schema
-    ) {
-      responseGrammar = convertJsonSchemaToGrammar(
-        options.responseFormat.schema as JSONSchema7
-      );
-    }
+    const responseGrammar = resolveResponseGrammar(options.responseFormat);
 
     // Extract function tools from the tools array
     const functionTools =
@@ -1133,16 +1136,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   ): Promise<LanguageModelV4StreamResult> {
     throwIfAborted(options.abortSignal);
     const handle = await this.ensureModelLoaded();
-    // Convert JSON schema to GBNF grammar if structured output is requested
-    let responseGrammar: string | undefined;
-    if (
-      options.responseFormat?.type === "json" &&
-      options.responseFormat.schema
-    ) {
-      responseGrammar = convertJsonSchemaToGrammar(
-        options.responseFormat.schema as JSONSchema7
-      );
-    }
+    const responseGrammar = resolveResponseGrammar(options.responseFormat);
 
     // Extract function tools from the tools array
     const functionTools =

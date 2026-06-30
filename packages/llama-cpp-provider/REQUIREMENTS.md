@@ -84,6 +84,7 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 ## Structured Output
 
 - JSON response formats with schemas must be converted to GBNF grammar and passed to native generation.
+- JSON response formats without schemas must be constrained to a JSON object grammar.
 - Structured output grammar must disable reasoning extraction for that call.
 - The JSON schema converter must support clear schema features used by the code: primitives, objects, arrays, enums, constants, `$ref`, `oneOf`, `anyOf`, `allOf`, string formats, string patterns, and numeric bounds.
 - Remote schema fetching must not be required or supported.

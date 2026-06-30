@@ -563,6 +563,22 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       await reasoningModel.dispose();
     });
+
+    it("constrains JSON response format without schema to a JSON object", async () => {
+      await model.doGenerate({
+        prompt: testMessages,
+        responseFormat: {
+          type: "json",
+        },
+      });
+
+      expect(nativeBinding.generate).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          grammar: expect.stringContaining("root ::= object"),
+        })
+      );
+    });
   });
 
   describe("doStream", () => {
@@ -604,6 +620,25 @@ describe("LlamaCppLanguageModel Integration", () => {
         expect.any(Number),
         expect.objectContaining({
           seed: 5678,
+        }),
+        expect.any(Function)
+      );
+    });
+
+    it("constrains streamed JSON response format without schema to a JSON object", async () => {
+      const result = await model.doStream({
+        prompt: testMessages,
+        responseFormat: {
+          type: "json",
+        },
+      });
+
+      await collectStreamParts(result.stream);
+
+      expect(nativeBinding.generateStream).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          grammar: expect.stringContaining("root ::= object"),
         }),
         expect.any(Function)
       );
