@@ -1750,7 +1750,7 @@ describe("LlamaCppLanguageModel Integration", () => {
       },
     ];
 
-    it("suppresses text deltas when output is a tool call", async () => {
+    it("streams tool input deltas when output is a tool call", async () => {
       vi.mocked(nativeBinding.generateStream).mockImplementationOnce(
         (handle, opts, onToken) => {
           // Simulate streaming a tool call JSON
@@ -1781,7 +1781,6 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       const parts = await collectStreamParts(stream);
 
-      // Should NOT have text-start, text-delta, or text-end events
       const textParts = parts.filter(
         (p) =>
           p.type === "text-start" ||
@@ -1790,11 +1789,105 @@ describe("LlamaCppLanguageModel Integration", () => {
       );
       expect(textParts).toHaveLength(0);
 
-      // Should have tool-call event
+      const toolInputStart = parts.find((p) => p.type === "tool-input-start");
+      const toolInputDeltas = parts.filter(
+        (p) => p.type === "tool-input-delta"
+      );
+      const toolInputEnd = parts.find((p) => p.type === "tool-input-end");
       const toolCallPart = parts.find((p) => p.type === "tool-call");
+
+      expect(toolInputStart).toBeDefined();
+      expect(toolInputStart?.toolName).toBe("weather");
+      expect(toolInputDeltas.map((p) => p.delta).join("")).toBe(
+        '{"location": "Tokyo"}'
+      );
+      expect(toolInputEnd).toBeDefined();
       expect(toolCallPart).toBeDefined();
       expect(toolCallPart?.toolName).toBe("weather");
-      expect(toolCallPart?.input).toBe('{"location":"Tokyo"}');
+      expect(toolCallPart?.input).toBe('{"location": "Tokyo"}');
+    });
+
+    it("emits streamed tool input before the final tool-call part", async () => {
+      vi.mocked(nativeBinding.generateStream).mockImplementationOnce(
+        (handle, opts, onToken) => {
+          onToken('{"name": "weather", "arguments": ');
+          onToken('{"location": ');
+          onToken('"Tokyo"');
+          onToken("}}");
+          return Promise.resolve({
+            text: '{"name": "weather", "arguments": {"location": "Tokyo"}}',
+            promptTokens: 50,
+            completionTokens: 15,
+            finishReason: "stop",
+          });
+        }
+      );
+
+      const { stream } = await model.doStream({
+        prompt: testMessages,
+        tools: testTools,
+      });
+
+      const parts = await collectStreamParts(stream);
+      const startIndex = parts.findIndex((p) => p.type === "tool-input-start");
+      const deltaIndex = parts.findIndex((p) => p.type === "tool-input-delta");
+      const endIndex = parts.findIndex((p) => p.type === "tool-input-end");
+      const callIndex = parts.findIndex((p) => p.type === "tool-call");
+
+      expect(startIndex).toBeGreaterThan(-1);
+      expect(deltaIndex).toBeGreaterThan(startIndex);
+      expect(endIndex).toBeGreaterThan(deltaIndex);
+      expect(callIndex).toBeGreaterThan(endIndex);
+    });
+
+    it("emits tool input parts for native parsed tool calls", async () => {
+      vi.mocked(nativeBinding.generateStream).mockImplementationOnce(() =>
+        Promise.resolve({
+          text: "",
+          promptTokens: 50,
+          completionTokens: 15,
+          finishReason: "stop",
+          toolCalls: [
+            {
+              id: "call_native",
+              name: "weather",
+              arguments: '{"location":"Tokyo"}',
+            },
+          ],
+        })
+      );
+
+      const { stream } = await model.doStream({
+        prompt: testMessages,
+        tools: testTools,
+      });
+
+      const parts = await collectStreamParts(stream);
+      const toolInputStart = parts.find((p) => p.type === "tool-input-start");
+      const toolInputDelta = parts.find((p) => p.type === "tool-input-delta");
+      const toolInputEnd = parts.find((p) => p.type === "tool-input-end");
+      const toolCallPart = parts.find((p) => p.type === "tool-call");
+
+      expect(toolInputStart).toEqual({
+        type: "tool-input-start",
+        id: "call_native",
+        toolName: "weather",
+      });
+      expect(toolInputDelta).toEqual({
+        type: "tool-input-delta",
+        id: "call_native",
+        delta: '{"location":"Tokyo"}',
+      });
+      expect(toolInputEnd).toEqual({
+        type: "tool-input-end",
+        id: "call_native",
+      });
+      expect(toolCallPart).toEqual({
+        type: "tool-call",
+        toolCallId: "call_native",
+        toolName: "weather",
+        input: '{"location":"Tokyo"}',
+      });
     });
 
     it("emits tool-calls finish reason when tool call detected", async () => {
@@ -1941,9 +2034,11 @@ describe("LlamaCppLanguageModel Integration", () => {
 
       const parts = await collectStreamParts(stream);
 
-      // Should suppress text deltas and emit tool-call
       const textDeltas = parts.filter((p) => p.type === "text-delta");
       expect(textDeltas).toHaveLength(0);
+
+      const toolInputStart = parts.find((p) => p.type === "tool-input-start");
+      expect(toolInputStart).toBeDefined();
 
       const toolCallPart = parts.find((p) => p.type === "tool-call");
       expect(toolCallPart).toBeDefined();
@@ -2025,7 +2120,7 @@ describe("LlamaCppLanguageModel Integration", () => {
                 {
                   id: toolCall.toolCallId,
                   name: "weather",
-                  arguments: '{"location":"Tokyo"}',
+                  arguments: '{"location": "Tokyo"}',
                 },
               ],
             },

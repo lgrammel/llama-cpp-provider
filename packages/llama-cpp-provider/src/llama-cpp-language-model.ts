@@ -486,6 +486,292 @@ function toolCallInput(toolCall: ParsedToolCall | NativeToolCall): string {
     : JSON.stringify(toolCall.arguments);
 }
 
+interface StreamedToolCall {
+  id: string;
+  name: string;
+  input: string;
+}
+
+interface ToolCallCandidate {
+  id?: string;
+  name: string;
+  argumentsStart: number;
+}
+
+function isJsonToolCallStart(text: string): boolean {
+  const trimmed = text.trimStart();
+  return trimmed.startsWith("{") || trimmed.startsWith("[");
+}
+
+function findStringEnd(text: string, start: number): number | undefined {
+  if (text[start] !== '"') {
+    return undefined;
+  }
+
+  let escaped = false;
+  for (let i = start + 1; i < text.length; i++) {
+    const char = text[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      return i + 1;
+    }
+  }
+
+  return undefined;
+}
+
+function parseJsonStringLiteral(literal: string): string | undefined {
+  try {
+    const parsed = JSON.parse(literal);
+    return typeof parsed === "string" ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function findPropertyName(
+  text: string,
+  propertyName: string,
+  start: number
+): { valueStart: number; nameEnd: number } | undefined {
+  for (let i = start; i < text.length; i++) {
+    const char = text[i];
+
+    if (char !== '"') {
+      continue;
+    }
+
+    const end = findStringEnd(text, i);
+    if (end === undefined) {
+      return undefined;
+    }
+
+    if (parseJsonStringLiteral(text.slice(i, end)) !== propertyName) {
+      i = end - 1;
+      continue;
+    }
+
+    let colon = end;
+    while (colon < text.length && /\s/.test(text[colon]!)) {
+      colon++;
+    }
+    if (colon >= text.length) {
+      return undefined;
+    }
+    if (text[colon] !== ":") {
+      i = end - 1;
+      continue;
+    }
+
+    let valueStart = colon + 1;
+    while (valueStart < text.length && /\s/.test(text[valueStart]!)) {
+      valueStart++;
+    }
+
+    return { valueStart, nameEnd: end };
+  }
+
+  return undefined;
+}
+
+function readStringPropertyValue(
+  text: string,
+  propertyName: string,
+  start: number
+): { value: string; valueEnd: number; nameEnd: number } | undefined {
+  const property = findPropertyName(text, propertyName, start);
+  if (!property || text[property.valueStart] !== '"') {
+    return undefined;
+  }
+
+  const valueEnd = findStringEnd(text, property.valueStart);
+  if (valueEnd === undefined) {
+    return undefined;
+  }
+
+  const value = parseJsonStringLiteral(
+    text.slice(property.valueStart, valueEnd)
+  );
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return {
+    value,
+    valueEnd,
+    nameEnd: property.nameEnd,
+  };
+}
+
+function findBalancedJsonValueEnd(
+  text: string,
+  start: number
+): number | undefined {
+  while (start < text.length && /\s/.test(text[start]!)) {
+    start++;
+  }
+
+  if (start >= text.length) {
+    return undefined;
+  }
+
+  const first = text[start];
+  if (first === '"') {
+    return findStringEnd(text, start);
+  }
+
+  if (first !== "{" && first !== "[") {
+    for (let i = start; i < text.length; i++) {
+      if (/[\s,\]}]/.test(text[i]!)) {
+        return i;
+      }
+    }
+    return undefined;
+  }
+
+  const stack = [first === "{" ? "}" : "]"];
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start + 1; i < text.length; i++) {
+    const char = text[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    } else if (char === "{" || char === "[") {
+      stack.push(char === "{" ? "}" : "]");
+    } else if (char === stack[stack.length - 1]) {
+      stack.pop();
+      if (stack.length === 0) {
+        return i + 1;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function findToolCallCandidate(
+  text: string,
+  start: number
+): ToolCallCandidate | undefined {
+  if (!isJsonToolCallStart(text)) {
+    return undefined;
+  }
+
+  const name = readStringPropertyValue(text, "name", start);
+  if (!name) {
+    return undefined;
+  }
+
+  const argumentsProperty = findPropertyName(text, "arguments", name.valueEnd);
+  if (!argumentsProperty) {
+    return undefined;
+  }
+
+  const id = readStringPropertyValue(text.slice(start, name.nameEnd), "id", 0);
+
+  return {
+    ...(id ? { id: id.value } : {}),
+    name: name.value,
+    argumentsStart: argumentsProperty.valueStart,
+  };
+}
+
+function createToolCallInputStreamer(
+  emitStart: (toolCall: { id: string; name: string }) => void,
+  emitDelta: (toolCall: { id: string; delta: string }) => void,
+  emitEnd: (toolCall: { id: string }) => void
+): {
+  push: (delta: string) => void;
+  streamedToolCalls: StreamedToolCall[];
+} {
+  let buffer = "";
+  let searchStart = 0;
+  let active:
+    | {
+        id: string;
+        name: string;
+        argumentsStart: number;
+        emittedUntil: number;
+      }
+    | undefined;
+  const streamedToolCalls: StreamedToolCall[] = [];
+
+  const process = () => {
+    while (true) {
+      if (!active) {
+        const candidate = findToolCallCandidate(buffer, searchStart);
+        if (!candidate) {
+          return;
+        }
+
+        active = {
+          id: candidate.id ?? generateToolCallId(),
+          name: candidate.name,
+          argumentsStart: candidate.argumentsStart,
+          emittedUntil: candidate.argumentsStart,
+        };
+        emitStart({ id: active.id, name: active.name });
+      }
+
+      const argumentsEnd = findBalancedJsonValueEnd(
+        buffer,
+        active.argumentsStart
+      );
+      const emitUntil = argumentsEnd ?? buffer.length;
+
+      if (emitUntil > active.emittedUntil) {
+        emitDelta({
+          id: active.id,
+          delta: buffer.slice(active.emittedUntil, emitUntil),
+        });
+        active.emittedUntil = emitUntil;
+      }
+
+      if (argumentsEnd === undefined) {
+        return;
+      }
+
+      emitEnd({ id: active.id });
+      streamedToolCalls.push({
+        id: active.id,
+        name: active.name,
+        input: buffer.slice(active.argumentsStart, argumentsEnd),
+      });
+
+      searchStart = argumentsEnd;
+      active = undefined;
+    }
+  };
+
+  return {
+    push(delta: string) {
+      buffer += delta;
+      process();
+    },
+    streamedToolCalls,
+  };
+}
+
 function toNativeTools(tools: LanguageModelV4FunctionTool[]): ToolDefinition[] {
   return tools.map((tool) => ({
     name: tool.name,
@@ -1233,6 +1519,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
 
           let textStartEmitted = false;
           let reasoningId: string | undefined;
+          const emittedToolInputs = new Set<string>();
 
           const emitTextDelta = (delta: string) => {
             if (delta.length === 0) {
@@ -1291,6 +1578,66 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
             reasoningId = undefined;
           };
 
+          const emitToolInput = (toolCall: {
+            id: string;
+            name: string;
+            input: string;
+          }) => {
+            if (emittedToolInputs.has(toolCall.id)) {
+              return;
+            }
+
+            controller.enqueue({
+              type: "tool-input-start",
+              id: toolCall.id,
+              toolName: toolCall.name,
+            });
+            if (toolCall.input.length > 0) {
+              controller.enqueue({
+                type: "tool-input-delta",
+                id: toolCall.id,
+                delta: toolCall.input,
+              });
+            }
+            controller.enqueue({
+              type: "tool-input-end",
+              id: toolCall.id,
+            });
+            emittedToolInputs.add(toolCall.id);
+          };
+
+          const toolInputStreamer = toolSettings.parseToolCalls
+            ? createToolCallInputStreamer(
+                (toolCall) => {
+                  if (emittedToolInputs.has(toolCall.id)) {
+                    return;
+                  }
+                  controller.enqueue({
+                    type: "tool-input-start",
+                    id: toolCall.id,
+                    toolName: toolCall.name,
+                  });
+                },
+                (toolCall) => {
+                  if (toolCall.delta.length === 0) {
+                    return;
+                  }
+                  controller.enqueue({
+                    type: "tool-input-delta",
+                    id: toolCall.id,
+                    delta: toolCall.delta,
+                  });
+                },
+                (toolCall) => {
+                  controller.enqueue({
+                    type: "tool-input-end",
+                    id: toolCall.id,
+                  });
+                  emittedToolInputs.add(toolCall.id);
+                }
+              )
+            : undefined;
+
           const reasoningProcessor = reasoningConfig
             ? createReasoningTokenProcessor(
                 reasoningConfig,
@@ -1311,6 +1658,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
                 }
 
                 if (toolSettings.parseToolCalls) {
+                  toolInputStreamer?.push(token);
                   return;
                 } else if (reasoningProcessor) {
                   reasoningProcessor.push(token);
@@ -1354,14 +1702,26 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
               }
 
               // Emit tool call events
-              for (const toolCall of toolCalls) {
-                const toolCallId = toolCall.id || generateToolCallId();
+              for (let index = 0; index < toolCalls.length; index++) {
+                const toolCall = toolCalls[index]!;
+                const streamedToolCall =
+                  toolInputStreamer?.streamedToolCalls[index];
+                const toolCallId =
+                  streamedToolCall?.id || toolCall.id || generateToolCallId();
+                const input =
+                  streamedToolCall?.input ?? toolCallInput(toolCall);
+
+                emitToolInput({
+                  id: toolCallId,
+                  name: toolCall.name,
+                  input,
+                });
 
                 controller.enqueue({
                   type: "tool-call",
                   toolCallId,
                   toolName: toolCall.name,
-                  input: toolCallInput(toolCall),
+                  input,
                 });
               }
               // Set finish reason to tool-calls

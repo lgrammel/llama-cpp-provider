@@ -103,7 +103,9 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 - Parsed tool calls must produce AI SDK `tool-call` content with JSON-stringified arguments.
 - Parsed tool calls must set the unified finish reason to `tool-calls`.
 - Non-JSON or invalid tool-call output must be returned as normal text.
-- Streaming with active tools must buffer generated text and emit parsed text/tool-call parts after native generation completes.
+- Streaming with active tools must emit `tool-input-start`, `tool-input-delta`, and `tool-input-end` parts for JSON-style streamed tool-call arguments when they can be recognized before native generation completes.
+- Streaming with active tools must emit the final `tool-call` part after native generation completes and parsed tool calls are available.
+- Streaming with active tools must buffer generated text until native parsing completes when the streamed output cannot be recognized as JSON-style tool-call arguments.
 - Cancelling a streamed response must cancel the corresponding native generation request.
 - `dispose()` must cancel active generation requests for the loaded model and wait for them to settle before unloading the native model handle.
 
