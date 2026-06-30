@@ -158,6 +158,7 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 - The package must export Gemma 4 and Qwen 3.6 model info presets.
 - Presets must provide chat template information and memory metadata.
 - Gemma 4 presets must provide reasoning marker configuration.
+- Qwen 3.6 presets must use the embedded GGUF chat template and `<think>` reasoning markers.
 
 ## Out Of Scope
 

@@ -94,8 +94,26 @@ describe("llamaCpp", () => {
         }),
       });
       expect(gemma4_26b_a4b.memory).toBeDefined();
-      expect(qwen3_6_dense.memory).toBeDefined();
-      expect(qwen3_6_moe.memory).toBeDefined();
+      expect(qwen3_6_dense).toMatchObject({
+        chatTemplate: "auto",
+        reasoning: expect.objectContaining({
+          openingMarker: "<think>",
+          closingMarker: "</think>",
+        }),
+        memory: expect.objectContaining({
+          maxContextSize: 262144,
+        }),
+      });
+      expect(qwen3_6_moe).toMatchObject({
+        chatTemplate: "auto",
+        reasoning: expect.objectContaining({
+          openingMarker: "<think>",
+          closingMarker: "</think>",
+        }),
+        memory: expect.objectContaining({
+          maxContextSize: 262144,
+        }),
+      });
     });
 
     it("handles minimal config with only modelPath", () => {

@@ -476,6 +476,29 @@ export interface ParsedToolCall {
   arguments: Record<string, unknown>;
 }
 
+function parseNamespacedXmlToolCalls(text: string): ParsedToolCall[] | null {
+  const toolCalls: ParsedToolCall[] = [];
+  const tagPattern =
+    /<([A-Za-z_][\w.-]*):([A-Za-z_][\w.-]*)>([\s\S]*?)<\/\1:\2>/g;
+
+  for (const match of text.matchAll(tagPattern)) {
+    const [, name, argumentName, argumentValue] = match;
+    if (!name || !argumentName || argumentValue === undefined) {
+      continue;
+    }
+
+    toolCalls.push({
+      id: generateToolCallId(),
+      name,
+      arguments: {
+        [argumentName]: argumentValue.trim(),
+      },
+    });
+  }
+
+  return toolCalls.length > 0 ? toolCalls : null;
+}
+
 function stringifyToolArguments(input: unknown): string {
   return typeof input === "string" ? input : JSON.stringify(input);
 }
@@ -989,7 +1012,7 @@ export function parseToolCalls(text: string): ParsedToolCall[] | null {
 
     // Must start with { or [ to be JSON
     if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
-      return null;
+      return parseNamespacedXmlToolCalls(trimmed);
     }
 
     const parsed = JSON.parse(trimmed);
@@ -1045,7 +1068,7 @@ export function parseToolCalls(text: string): ParsedToolCall[] | null {
 
     return null;
   } catch {
-    return null;
+    return parseNamespacedXmlToolCalls(text);
   }
 }
 

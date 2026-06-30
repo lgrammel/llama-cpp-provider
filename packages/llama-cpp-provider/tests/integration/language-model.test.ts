@@ -41,6 +41,7 @@ import { LlamaCppLanguageModel } from "../../src/llama-cpp-language-model.js";
 import { LlamaCppEmbeddingModel } from "../../src/llama-cpp-embedding-model.js";
 import * as nativeBinding from "../../src/native-binding.js";
 import { gemma4Reasoning } from "../../src/gemma4.js";
+import { qwen3_6_dense } from "../../src/qwen3.6.js";
 
 describe("LlamaCppLanguageModel Integration", () => {
   let model: LlamaCppLanguageModel;
@@ -604,6 +605,66 @@ describe("LlamaCppLanguageModel Integration", () => {
       expect(result.finishReason.unified).toBe("tool-calls");
 
       await reasoningModel.dispose();
+    });
+
+    it("parses Qwen-style XML tool calls without leaking control or thinking text", async () => {
+      vi.mocked(nativeBinding.generate).mockResolvedValueOnce({
+        text: `<|im_start|>assistant
+<think>
+The user asks whether ffmpeg is available. I should check with the sandbox shell.
+</think>
+
+<sandboxshell:cmd>which ffmpeg && ffmpeg -version</sandboxshell:cmd>`,
+        promptTokens: 50,
+        completionTokens: 42,
+        finishReason: "stop",
+      });
+
+      const qwenModel = new LlamaCppLanguageModel({
+        modelPath: "/test/qwen3.6.gguf",
+        reasoning: qwen3_6_dense.reasoning,
+      });
+
+      const result = await qwenModel.doGenerate({
+        prompt: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "can i use ffmpeg in the sandbox" },
+            ],
+          },
+        ],
+        tools: [
+          {
+            type: "function",
+            name: "sandboxshell",
+            inputSchema: {
+              type: "object",
+              properties: { cmd: { type: "string" } },
+              required: ["cmd"],
+            },
+          },
+        ],
+      });
+
+      expect(result.content).toHaveLength(2);
+      expect(result.content[0]).toMatchObject({
+        type: "reasoning",
+        providerMetadata: undefined,
+      });
+      expect(result.content[0]).toHaveProperty(
+        "text",
+        expect.stringContaining("I should check with the sandbox shell")
+      );
+      expect(result.content[1]).toEqual({
+        type: "tool-call",
+        toolCallId: expect.any(String),
+        toolName: "sandboxshell",
+        input: '{"cmd":"which ffmpeg && ffmpeg -version"}',
+      });
+      expect(result.finishReason.unified).toBe("tool-calls");
+
+      await qwenModel.dispose();
     });
 
     it("does not inject reasoning prompt when constrained by JSON grammar", async () => {

@@ -247,6 +247,24 @@ describe("Tool Calling", () => {
         metadata: { priority: 1, tags: ["important"] },
       });
     });
+
+    it("parses Qwen-style namespaced XML tool calls inside generated text", () => {
+      const text = `<|im_start|>assistant
+<think>
+Need to check the sandbox.
+</think>
+
+<sandboxshell:cmd>which ffmpeg && ffmpeg -version</sandboxshell:cmd>`;
+
+      const result = parseToolCalls(text);
+
+      expect(result).not.toBeNull();
+      expect(result).toHaveLength(1);
+      expect(result![0].name).toBe("sandboxshell");
+      expect(result![0].arguments).toEqual({
+        cmd: "which ffmpeg && ffmpeg -version",
+      });
+    });
   });
 
   describe("buildToolSystemPrompt", () => {

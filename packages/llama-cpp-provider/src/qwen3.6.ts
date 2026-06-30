@@ -1,7 +1,9 @@
 import type { LlamaCppModelInfo } from "./llama-cpp-provider-config.js";
+import { thinkTagsReasoning } from "./llama-cpp-provider-config.js";
 
 export const qwen3_6_dense: LlamaCppModelInfo = {
-  chatTemplate: "chatml",
+  chatTemplate: "auto",
+  reasoning: thinkTagsReasoning,
   memory: {
     maxContextSize: 262144,
     kvCache: {
@@ -25,7 +27,8 @@ export const qwen3_6_dense: LlamaCppModelInfo = {
 };
 
 export const qwen3_6_moe: LlamaCppModelInfo = {
-  chatTemplate: "chatml",
+  chatTemplate: "auto",
+  reasoning: thinkTagsReasoning,
   memory: {
     maxContextSize: 262144,
     kvCache: {
