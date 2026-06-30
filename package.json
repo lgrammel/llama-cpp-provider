@@ -10,8 +10,10 @@
   },
   "scripts": {
     "changeset": "changeset",
-    "changeset:version": "changeset version",
-    "changeset:publish": "pnpm build:ts && changeset publish",
+    "pack:package": "pnpm --filter @lgrammel/llama-cpp-provider pack",
+    "release": "node scripts/release.mjs",
+    "release:dry": "node scripts/release.mjs --dry-run",
+    "version": "changeset version",
     "prepare": "husky",
     "build": "pnpm -r build",
     "build:ts": "pnpm -r build:ts",

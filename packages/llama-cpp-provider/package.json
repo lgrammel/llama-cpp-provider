@@ -17,6 +17,9 @@
     "scripts",
     "CMakeLists.txt"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "llamaCpp": {
     "repo": "https://github.com/ggml-org/llama.cpp.git",
     "commit": "8c146a8366304c871efc26057cc90370ccf58dad"
@@ -29,7 +32,7 @@
     "build:ts": "tsc",
     "build": "pnpm run build:native && pnpm run build:ts",
     "clean": "rm -rf dist build llama.cpp",
-    "prepublishOnly": "pnpm run build:ts",
+    "prepack": "pnpm run build:ts",
     "test": "vitest",
     "test:run": "vitest run",
     "test:unit": "vitest run tests/unit",

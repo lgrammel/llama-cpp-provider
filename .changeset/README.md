@@ -23,10 +23,10 @@ When you're ready to release:
 
 ```bash
 # Update versions and changelogs based on changesets
-pnpm changeset version
+pnpm version
 
-# Publish to npm
-pnpm changeset publish
+# Publish to npm through the release wrapper
+pnpm release
 ```
 
 ## More information

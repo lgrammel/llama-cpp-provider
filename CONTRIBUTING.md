@@ -156,54 +156,37 @@ For detailed information about the codebase structure, architecture, and interna
 
 ## Releasing (Maintainers Only)
 
-Releases are done manually by maintainers.
+Releases are done manually by maintainers from `main`.
 
-### 1. Version Packages
-
-Run the version command to consume all changesets and update package versions:
+Run a dry run before publishing:
 
 ```bash
-pnpm changeset:version
+pnpm release:dry
 ```
 
-This will:
-- Update `package.json` versions
-- Update `CHANGELOG.md` files
-- Remove the consumed changeset files
-
-Review the changes and commit them:
-
-```bash
-git add .
-git commit -m "chore: version packages"
-git push
-```
-
-### 2. Publish to npm
-
-Ensure you're logged in to npm:
+To publish, ensure you're logged in to npm:
 
 ```bash
 npm login
 ```
 
-Then publish:
+Then run:
 
 ```bash
-pnpm changeset:publish
+pnpm release
 ```
 
-This will build the TypeScript and publish the package to npm.
-
-### 3. Create a Git Tag
-
-After publishing, create and push a git tag:
+Pass an npm two-factor code when required:
 
 ```bash
-git tag v$(node -p "require('./packages/llama-cpp-provider/package.json').version")
-git push --tags
+pnpm release -- --otp 123456
 ```
 
-### 4. Create a GitHub Release
+The release command consumes pending changesets with `pnpm version`, runs checks, performs an npm publish dry run, commits release file changes when needed, publishes with Changesets, and creates the package tag. Push the release commit and tag after a successful release:
+
+```bash
+git push
+git push origin @lgrammel/llama-cpp-provider@$(node -p "require('./packages/llama-cpp-provider/package.json').version")
+```
 
 Optionally, create a GitHub release from the tag with the changelog contents.
