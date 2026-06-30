@@ -18,6 +18,7 @@ This file provides guidance for AI coding agents (Cursor, Copilot, Claude Code) 
 | Build everything | `pnpm build` |
 | Build TypeScript only | `pnpm build:ts` |
 | Build native only | `pnpm build:native` |
+| Check formatting | `pnpm format:check` |
 | Run all tests once | `pnpm test:run` |
 | Run unit tests | `pnpm test:unit` |
 | Run integration tests | `pnpm test:integration` |
@@ -274,6 +275,7 @@ try {
 - **Imports**: Use `.js` extensions for local imports (e.g., `import { foo } from "./bar.js"`)
 - **Async/Await**: Preferred over raw Promises
 - **Error handling**: Use try/finally for model lifecycle management
+- **Formatting**: Run `pnpm format:check` before handoff when editing TypeScript, examples, tests, or native C++ files. For native files, this runs `clang-format --dry-run --Werror`; use `pnpm format:fix` or `clang-format -i packages/llama-cpp-provider/native/*.cpp packages/llama-cpp-provider/native/*.h` before committing C++ changes.
 - **Requirements**: When behavior in `packages/llama-cpp-provider` changes, update `packages/llama-cpp-provider/REQUIREMENTS.md` in the same change if the documented requirements are affected. Keep it concise, accurate, and non-contradictory.
 
 ## Architecture & Internal Structure
@@ -343,7 +345,8 @@ Use `pnpm changeset` after user-facing package changes. Select the changed packa
 
 1. Edit files in `packages/llama-cpp-provider/native/`
 2. Rebuild with `pnpm build:native`
-3. Test with `pnpm test:run`
+3. Run `pnpm format:check` to catch `clang-format` violations before CI
+4. Test with `pnpm test:run`
 
 ### Debugging
 

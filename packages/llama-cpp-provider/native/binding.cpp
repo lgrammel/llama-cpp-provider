@@ -549,7 +549,8 @@ void ParseGenerationToolOptions(Napi::Object options, llama_wrapper::GenerationP
   }
 }
 
-void ParseGenerationReasoningOptions(Napi::Object options, llama_wrapper::GenerationParams &params) {
+void ParseGenerationReasoningOptions(Napi::Object options,
+                                     llama_wrapper::GenerationParams &params) {
   if (options.Has("reasoningBudgetTokens") && options.Get("reasoningBudgetTokens").IsNumber()) {
     params.reasoning_budget_tokens =
         options.Get("reasoningBudgetTokens").As<Napi::Number>().Int32Value();
