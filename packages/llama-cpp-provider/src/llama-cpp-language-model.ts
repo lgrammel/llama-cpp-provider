@@ -12,7 +12,6 @@ import type {
   LanguageModelV4Usage,
   SharedV4Warning,
 } from "@ai-sdk/provider";
-import { stat } from "node:fs/promises";
 
 import {
   loadModel,
@@ -42,6 +41,7 @@ import {
   type LlamaCppReasoningConfig,
 } from "./llama-cpp-provider-config.js";
 import { checkMemorySafety } from "./memory-estimation.js";
+import { getFileSize } from "./utils/files.js";
 
 export interface LlamaCppModelConfig {
   modelPath: string;
@@ -1296,6 +1296,13 @@ function resolveActiveFunctionTools(
   };
 }
 
+interface PreparedGenerationRequest {
+  requestId: string;
+  generateOptions: GenerateOptions;
+  reasoningConfig?: ResolvedReasoningConfig;
+  toolSettings: ReturnType<typeof resolveActiveFunctionTools>;
+}
+
 export class LlamaCppLanguageModel implements LanguageModelV4 {
   readonly specificationVersion = "v4" as const;
   readonly provider = "llama.cpp";
@@ -1402,19 +1409,14 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
     }
   }
 
-  async doGenerate(
+  private prepareGenerationRequest(
     options: LanguageModelV4CallOptions
-  ): Promise<LanguageModelV4GenerateResult> {
-    throwIfAborted(options.abortSignal);
-    const handle = await this.ensureModelLoaded();
+  ): PreparedGenerationRequest {
     const responseGrammar = resolveResponseGrammar(options);
-
-    // Extract function tools from the tools array
     const functionTools =
       options.tools?.filter(
-        (t): t is LanguageModelV4FunctionTool => t.type === "function"
+        (tool): tool is LanguageModelV4FunctionTool => tool.type === "function"
       ) ?? [];
-
     const toolSettings = resolveActiveFunctionTools(
       functionTools,
       options.toolChoice
@@ -1426,20 +1428,15 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       );
     }
 
-    const grammar = responseGrammar;
-
     const reasoningConfig = resolveCallReasoningConfig(
       options,
       this.config.reasoning,
-      grammar
+      responseGrammar
     );
-
-    const messages = convertMessages(options.prompt, reasoningConfig);
     const requestId = crypto.randomUUID();
-
     const generateOptions: GenerateOptions = {
       requestId,
-      messages,
+      messages: convertMessages(options.prompt, reasoningConfig),
       tools: toolSettings.tools ? toNativeTools(toolSettings.tools) : undefined,
       toolChoice: toolSettings.toolChoice,
       parallelToolCalls: resolveParallelToolCalls(options),
@@ -1448,8 +1445,9 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
       topP: options.topP ?? DEFAULT_TOP_P,
       topK: options.topK ?? DEFAULT_TOP_K,
       stopSequences: options.stopSequences,
-      grammar,
+      grammar: responseGrammar,
     };
+
     if (reasoningConfig?.budgetTokens !== undefined) {
       generateOptions.reasoningBudgetTokens = reasoningConfig.budgetTokens;
       generateOptions.reasoningBudgetStart = reasoningConfig.opening;
@@ -1462,10 +1460,27 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
     if (this.config.cache?.mode === "prefix") {
       generateOptions.promptCache = true;
     }
+
     validateGenerationContextSize(
       this.loadedContextSize,
       generateOptions.maxTokens
     );
+
+    return {
+      requestId,
+      generateOptions,
+      reasoningConfig,
+      toolSettings,
+    };
+  }
+
+  async doGenerate(
+    options: LanguageModelV4CallOptions
+  ): Promise<LanguageModelV4GenerateResult> {
+    throwIfAborted(options.abortSignal);
+    const handle = await this.ensureModelLoaded();
+    const { requestId, generateOptions, reasoningConfig, toolSettings } =
+      this.prepareGenerationRequest(options);
 
     const result = await this.runWithAbortSignal(
       handle,
@@ -1549,65 +1564,8 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   ): Promise<LanguageModelV4StreamResult> {
     throwIfAborted(options.abortSignal);
     const handle = await this.ensureModelLoaded();
-    const responseGrammar = resolveResponseGrammar(options);
-
-    // Extract function tools from the tools array
-    const functionTools =
-      options.tools?.filter(
-        (t): t is LanguageModelV4FunctionTool => t.type === "function"
-      ) ?? [];
-
-    const toolSettings = resolveActiveFunctionTools(
-      functionTools,
-      options.toolChoice
-    );
-
-    if (responseGrammar && toolSettings.parseToolCalls) {
-      throw new Error(
-        "Structured JSON response format cannot be combined with active tools."
-      );
-    }
-
-    const grammar = responseGrammar;
-
-    const reasoningConfig = resolveCallReasoningConfig(
-      options,
-      this.config.reasoning,
-      grammar
-    );
-
-    const messages = convertMessages(options.prompt, reasoningConfig);
-    const requestId = crypto.randomUUID();
-
-    const generateOptions: GenerateOptions = {
-      requestId,
-      messages,
-      tools: toolSettings.tools ? toNativeTools(toolSettings.tools) : undefined,
-      toolChoice: toolSettings.toolChoice,
-      parallelToolCalls: resolveParallelToolCalls(options),
-      maxTokens: options.maxOutputTokens ?? DEFAULT_MAX_TOKENS,
-      temperature: options.temperature ?? DEFAULT_TEMPERATURE,
-      topP: options.topP ?? DEFAULT_TOP_P,
-      topK: options.topK ?? DEFAULT_TOP_K,
-      stopSequences: options.stopSequences,
-      grammar,
-    };
-    if (reasoningConfig?.budgetTokens !== undefined) {
-      generateOptions.reasoningBudgetTokens = reasoningConfig.budgetTokens;
-      generateOptions.reasoningBudgetStart = reasoningConfig.opening;
-      generateOptions.reasoningBudgetEnd = reasoningConfig.closing;
-    }
-    if (options.seed !== undefined) {
-      validateGenerationSeed(options.seed);
-      generateOptions.seed = options.seed;
-    }
-    if (this.config.cache?.mode === "prefix") {
-      generateOptions.promptCache = true;
-    }
-    validateGenerationContextSize(
-      this.loadedContextSize,
-      generateOptions.maxTokens
-    );
+    const { requestId, generateOptions, reasoningConfig, toolSettings } =
+      this.prepareGenerationRequest(options);
 
     const textId = crypto.randomUUID();
 
@@ -1626,12 +1584,15 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
           let reasoningId: string | undefined;
           const emittedToolInputs = new Set<string>();
 
-          const emitTextDelta = (delta: string) => {
+          const emitTextDelta = (
+            delta: string,
+            emitOptions: { force?: boolean } = {}
+          ) => {
             if (delta.length === 0) {
               return;
             }
 
-            if (toolSettings.parseToolCalls) {
+            if (toolSettings.parseToolCalls && !emitOptions.force) {
               return;
             }
 
@@ -1711,6 +1672,23 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
             emittedToolInputs.add(toolCall.id);
           };
 
+          const emitParsedContent = (
+            parts: ParsedReasoningPart[],
+            emitOptions: { includeText: boolean } = { includeText: true }
+          ) => {
+            for (const part of parts) {
+              if (part.text.length === 0) {
+                continue;
+              }
+              if (part.type === "reasoning") {
+                emitReasoningDelta(part.text);
+                endReasoning();
+              } else if (emitOptions.includeText) {
+                emitTextDelta(part.text, { force: true });
+              }
+            }
+          };
+
           const toolInputStreamer = toolSettings.parseToolCalls
             ? createToolCallInputStreamer(
                 (toolCall) => {
@@ -1784,27 +1762,23 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
 
           if (toolSettings.parseToolCalls) {
             const parsedText = result.text;
+            const parsedContent = reasoningConfig
+              ? splitReasoningContent(parsedText, reasoningConfig)
+              : [{ type: "text" as const, text: parsedText }];
+            const visibleText = getVisibleText(parsedContent);
             const nativeToolCalls = result.toolCalls;
             const fallbackToolCalls = nativeToolCalls?.length
               ? undefined
-              : parseToolCalls(parsedText);
+              : parseToolCalls(visibleText);
             const toolCalls = nativeToolCalls?.length
               ? nativeToolCalls
               : fallbackToolCalls;
 
             if (toolCalls && toolCalls.length > 0) {
-              if (nativeToolCalls?.length && parsedText.length > 0) {
-                controller.enqueue({
-                  type: "text-start",
-                  id: textId,
-                });
-                controller.enqueue({
-                  type: "text-delta",
-                  id: textId,
-                  delta: parsedText,
-                });
-                textStartEmitted = true;
-              }
+              emitParsedContent(parsedContent, {
+                includeText:
+                  nativeToolCalls !== undefined && nativeToolCalls.length > 0,
+              });
 
               // Emit tool call events
               for (let index = 0; index < toolCalls.length; index++) {
@@ -1835,16 +1809,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
                 raw: "tool-calls",
               };
             } else if (parsedText.length > 0) {
-              controller.enqueue({
-                type: "text-start",
-                id: textId,
-              });
-              controller.enqueue({
-                type: "text-delta",
-                id: textId,
-                delta: parsedText,
-              });
-              textStartEmitted = true;
+              emitParsedContent(parsedContent);
             }
           }
 
@@ -1964,14 +1929,6 @@ async function checkModelMemorySafety(options: {
     mmprojFileSizeBytes,
     memorySafety: options.memorySafety,
   });
-}
-
-async function getFileSize(path: string): Promise<number | undefined> {
-  try {
-    return (await stat(path)).size;
-  } catch {
-    return undefined;
-  }
 }
 
 function validateGenerationContextSize(

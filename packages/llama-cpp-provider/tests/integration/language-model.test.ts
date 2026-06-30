@@ -2198,6 +2198,51 @@ describe("LlamaCppLanguageModel Integration", () => {
       expect(toolCallPart?.toolName).toBe("weather");
     });
 
+    it("uses visible text for streamed tool call parsing after reasoning", async () => {
+      vi.mocked(nativeBinding.generateStream).mockImplementationOnce(
+        (handle, opts, onToken) => {
+          onToken("<|channel>thought\nNeed weather.<channel|>");
+          onToken('{"name":"weather","arguments":{"location":"Tokyo"}}');
+          return Promise.resolve({
+            text: '<|channel>thought\nNeed weather.<channel|>{"name":"weather","arguments":{"location":"Tokyo"}}',
+            promptTokens: 50,
+            completionTokens: 20,
+            finishReason: "stop",
+          });
+        }
+      );
+
+      const reasoningModel = new LlamaCppLanguageModel({
+        modelPath: "/test/model.gguf",
+        reasoning: gemma4Reasoning,
+      });
+
+      const { stream } = await reasoningModel.doStream({
+        prompt: testMessages,
+        tools: testTools,
+      });
+
+      const parts = await collectStreamParts(stream);
+      const reasoningDeltas = parts.filter((p) => p.type === "reasoning-delta");
+      const textDeltas = parts.filter((p) => p.type === "text-delta");
+      const toolCallPart = parts.find((p) => p.type === "tool-call");
+      const finishPart = parts.find((p) => p.type === "finish");
+
+      expect(reasoningDeltas.map((p) => p.delta).join("")).toBe(
+        "Need weather."
+      );
+      expect(textDeltas).toHaveLength(0);
+      expect(toolCallPart).toEqual(
+        expect.objectContaining({
+          toolName: "weather",
+          input: '{"location":"Tokyo"}',
+        })
+      );
+      expect(finishPart?.finishReason.unified).toBe("tool-calls");
+
+      await reasoningModel.dispose();
+    });
+
     it("preserves streamed tool-call JSON in later cached prompts", async () => {
       const cachedModel = new LlamaCppLanguageModel({
         modelPath: "/test/model.gguf",

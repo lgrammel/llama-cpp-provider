@@ -4,7 +4,6 @@ import type {
   EmbeddingModelV4Result,
   SharedV4Warning,
 } from "@ai-sdk/provider";
-import { stat } from "node:fs/promises";
 
 import {
   loadModel,
@@ -16,6 +15,7 @@ import {
 } from "./native-binding.js";
 import type { LlamaCppProviderConfig } from "./llama-cpp-provider-config.js";
 import { checkMemorySafety } from "./memory-estimation.js";
+import { getFileSize } from "./utils/files.js";
 
 export class LlamaCppEmbeddingModel implements EmbeddingModelV4 {
   readonly specificationVersion = "v4" as const;
@@ -126,13 +126,5 @@ export class LlamaCppEmbeddingModel implements EmbeddingModelV4 {
       },
       warnings,
     };
-  }
-}
-
-async function getFileSize(path: string): Promise<number | undefined> {
-  try {
-    return (await stat(path)).size;
-  } catch {
-    return undefined;
   }
 }

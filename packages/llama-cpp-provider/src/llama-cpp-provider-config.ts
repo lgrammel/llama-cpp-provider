@@ -27,7 +27,7 @@ export interface LlamaCppReasoningConfig {
    * `provider-default` applies when the call omits `reasoning` or explicitly
    * passes `"provider-default"`. Omit an effort to leave that effort
    * unrestricted.
-  */
+   */
   effortTokenBudget?: Partial<Record<LlamaCppReasoningEffort, number>>;
 }
 
