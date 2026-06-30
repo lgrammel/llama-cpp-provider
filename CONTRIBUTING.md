@@ -55,6 +55,8 @@ The `pnpm install` step automatically compiles llama.cpp and builds the native N
 | `pnpm test:unit` | Run unit tests only |
 | `pnpm test:integration` | Run integration tests only |
 | `pnpm test:e2e` | Run E2E tests (requires `TEST_MODEL_PATH`) |
+| `pnpm test:e2e:agent` | Run short agent-friendly E2E smoke tests |
+| `pnpm e2e:doctor` | Check E2E model/native-addon readiness |
 | `pnpm lint` | Check TypeScript with oxlint |
 | `pnpm lint:fix` | Fix auto-fixable oxlint issues |
 | `pnpm format:check` | Check code formatting |
@@ -98,6 +100,7 @@ pnpm agent
 - Add **unit tests** for new pure functions in `packages/llama-cpp-provider/tests/unit/`
 - Add **integration tests** for new model behavior in `packages/llama-cpp-provider/tests/integration/`
 - Ensure all existing tests pass before submitting
+- For automated local E2E verification, run `pnpm test:e2e:agent`. It downloads or reuses a cached GGUF model unless `TEST_MODEL_PATH` is set, then runs a compact smoke suite and writes `test-results/e2e-agent.json`.
 
 ### Pull Request Guidelines
 

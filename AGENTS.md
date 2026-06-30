@@ -24,6 +24,8 @@ This file provides guidance for AI coding agents (Cursor, Copilot, Claude Code) 
 | Run unit tests | `pnpm test:unit` |
 | Run integration tests | `pnpm test:integration` |
 | Run E2E tests | `TEST_MODEL_PATH=./models/model.gguf pnpm test:e2e` |
+| Run agent E2E smoke tests | `pnpm test:e2e:agent` |
+| Check E2E readiness | `pnpm e2e:doctor` |
 | Run example | `pnpm --filter @examples/basic agent` |
 | Clean build artifacts | `pnpm clean` |
 
@@ -157,6 +159,12 @@ pnpm test:integration
 # Run E2E tests (requires a GGUF model)
 TEST_MODEL_PATH=./models/your-model.gguf pnpm test:e2e
 
+# Run the short agent-friendly E2E smoke profile
+pnpm test:e2e:agent
+
+# Check model/native-addon readiness without running tests
+pnpm e2e:doctor
+
 # Run tests with coverage
 pnpm test:coverage
 ```
@@ -165,6 +173,16 @@ pnpm test:coverage
 
 E2E tests require the `TEST_MODEL_PATH` environment variable to point to a valid GGUF model file. Without this, E2E tests are automatically skipped.
 
+Coding agents should prefer `pnpm test:e2e:agent` for automated end-to-end verification. It:
+
+1. Checks platform, Node.js, TypeScript build output, and the native addon.
+2. Uses `TEST_MODEL_PATH` when already set.
+3. Otherwise downloads a default GGUF model to `models/e2e-cache/`.
+4. Runs the compact `tests/e2e/src/agent-smoke.test.ts` suite with CPU-only settings.
+5. Writes an agent-readable JSON summary to `test-results/e2e-agent.json`.
+
+The default agent model URL can be overridden with `TEST_AGENT_MODEL_URL`. Set `TEST_AGENT_MODEL_SHA256` to enforce checksum verification for downloaded models. The agent runner defaults to `TEST_E2E_CONTEXT_SIZE=1024`, `TEST_E2E_GPU_LAYERS=0`, and `TEST_E2E_THREADS=2`; these can be overridden when needed.
+
 ```bash
 # Download a model for testing
 mkdir -p models
@@ -172,6 +190,16 @@ wget -P models/ https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/reso
 
 # Run E2E tests
 TEST_MODEL_PATH=./models/Llama-3.2-1B-Instruct-Q4_K_M.gguf pnpm test:e2e
+```
+
+Capability-specific E2E commands are also available:
+
+```bash
+pnpm test:e2e:smoke
+pnpm test:e2e:structured
+pnpm test:e2e:tools
+pnpm test:e2e:embedding
+pnpm test:e2e:vision
 ```
 
 ### Writing Tests

@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateText, streamText } from "ai";
 import { llamaCpp, LlamaCppLanguageModel } from "@lgrammel/llama-cpp-provider";
-import { formatModelInfo, languageModelConfig } from "./e2e-config.js";
+import {
+  formatModelInfo,
+  languageModelConfig,
+  modelRuntimeConfig,
+} from "./e2e-config.js";
 
 /**
  * E2E tests for the llama.cpp provider.
@@ -35,9 +39,7 @@ describeE2E("E2E Generation Tests", () => {
     model = llamaCpp(
       languageModelConfig({
         modelPath: TEST_MODEL_PATH,
-        contextSize: 2048,
-        gpuLayers: 0, // Use CPU for CI compatibility
-        threads: 4,
+        ...modelRuntimeConfig({ contextSize: 2048 }),
       })
     );
   });
@@ -222,7 +224,7 @@ describeE2E("E2E Generation Tests", () => {
       const model2 = llamaCpp(
         languageModelConfig({
           modelPath: TEST_MODEL_PATH,
-          contextSize: 1024,
+          ...modelRuntimeConfig({ contextSize: 1024 }),
         })
       );
 

@@ -4,6 +4,7 @@ import {
   llamaCpp,
   type LlamaCppEmbeddingModel,
 } from "@lgrammel/llama-cpp-provider";
+import { modelRuntimeConfig } from "./e2e-config.js";
 
 /**
  * E2E tests for the llama.cpp embedding provider.
@@ -31,9 +32,7 @@ describeE2E("E2E Embedding Tests", () => {
 
     model = llamaCpp.embedding({
       modelPath: TEST_EMBEDDING_PATH,
-      contextSize: 2048,
-      gpuLayers: 0, // Use CPU for CI compatibility
-      threads: 4,
+      ...modelRuntimeConfig({ contextSize: 2048 }),
     });
   });
 
@@ -71,7 +70,7 @@ describeE2E("E2E Embedding Tests", () => {
 
       const model2 = llamaCpp.embedding({
         modelPath: TEST_EMBEDDING_PATH,
-        contextSize: 1024,
+        ...modelRuntimeConfig({ contextSize: 1024 }),
       });
 
       const { embedding } = await embed({

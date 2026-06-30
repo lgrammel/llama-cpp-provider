@@ -5,6 +5,13 @@
   "scripts": {
     "test": "vitest",
     "test:run": "vitest run",
+    "test:agent": "tsx scripts/run-agent-e2e.ts",
+    "test:smoke": "vitest run src/generation.test.ts",
+    "test:structured": "vitest run src/structured-output.test.ts",
+    "test:tools": "vitest run src/tool-calling.test.ts",
+    "test:embedding": "vitest run src/embedding.test.ts",
+    "test:vision": "vitest run src/image-input.test.ts",
+    "e2e:doctor": "tsx scripts/e2e-doctor.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

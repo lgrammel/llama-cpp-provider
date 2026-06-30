@@ -28,6 +28,7 @@ pnpm-debug.log*
 # Test models (users should download their own)
 *.gguf
 models/
+test-results/
 
 # Environment
 .env

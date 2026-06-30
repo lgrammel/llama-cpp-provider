@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { readFile } from "node:fs/promises";
 import { generateText } from "ai";
 import { llamaCpp, LlamaCppLanguageModel } from "@lgrammel/llama-cpp-provider";
-import { languageModelConfig } from "./e2e-config.js";
+import { languageModelConfig, modelRuntimeConfig } from "./e2e-config.js";
 
 const TEST_MODEL_PATH = process.env.TEST_MODEL_PATH;
 const TEST_MMPROJ_PATH = process.env.TEST_MMPROJ_PATH;
@@ -26,9 +26,7 @@ describeE2E("E2E Image Input Tests", () => {
       languageModelConfig({
         modelPath: TEST_MODEL_PATH,
         mmprojPath: TEST_MMPROJ_PATH,
-        contextSize: 4096,
-        gpuLayers: 0,
-        threads: 4,
+        ...modelRuntimeConfig({ contextSize: 4096 }),
       })
     );
   });

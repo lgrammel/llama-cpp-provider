@@ -2,7 +2,11 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateText, tool, stepCountIs } from "ai";
 import { z } from "zod/v4";
 import { llamaCpp, LlamaCppLanguageModel } from "@lgrammel/llama-cpp-provider";
-import { formatModelInfo, languageModelConfig } from "./e2e-config.js";
+import {
+  formatModelInfo,
+  languageModelConfig,
+  modelRuntimeConfig,
+} from "./e2e-config.js";
 
 /**
  * E2E tests for tool calling with llama.cpp.
@@ -48,9 +52,7 @@ describeE2E("E2E Tool Calling Tests", () => {
     model = llamaCpp(
       languageModelConfig({
         modelPath: TEST_MODEL_PATH,
-        contextSize: 4096,
-        gpuLayers: 0, // Use CPU for CI compatibility
-        threads: 4,
+        ...modelRuntimeConfig({ contextSize: 4096 }),
       })
     );
   });
