@@ -908,8 +908,6 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
       break;
     }
 
-    llama_sampler_accept(sampler_, new_token);
-
     // Convert token to string
     std::string token_str = detokenize(new_token);
     generated_text += token_str;
@@ -1045,8 +1043,6 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
       result.finish_reason = "stop";
       break;
     }
-
-    llama_sampler_accept(sampler_, new_token);
 
     // Convert token to string
     std::string token_str = detokenize(new_token);
