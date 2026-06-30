@@ -783,24 +783,129 @@ function toNativeTools(tools: LanguageModelV4FunctionTool[]): ToolDefinition[] {
 function resolveParallelToolCalls(
   options: LanguageModelV4CallOptions
 ): boolean {
-  const providerOptions = options.providerOptions as
-    | Record<string, Record<string, unknown> | undefined>
-    | undefined;
-  const llamaCppOptions =
-    providerOptions?.["llama.cpp"] ?? providerOptions?.llamaCpp;
+  const llamaCppOptions = getLlamaCppProviderOptions(options);
   return llamaCppOptions?.parallelToolCalls === true;
 }
 
-function resolveResponseGrammar(
-  responseFormat: LanguageModelV4CallOptions["responseFormat"]
-): string | undefined {
-  if (responseFormat?.type !== "json") {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getLlamaCppProviderOptions(
+  options: LanguageModelV4CallOptions
+): Record<string, unknown> | undefined {
+  const providerOptions = options.providerOptions as
+    | Record<string, unknown>
+    | undefined;
+  const llamaCppOptions =
+    providerOptions?.["llama.cpp"] ?? providerOptions?.llamaCpp;
+  return isRecord(llamaCppOptions) ? llamaCppOptions : undefined;
+}
+
+function getSchemaOption(
+  options: Record<string, unknown> | undefined
+): JSONSchema7 | undefined {
+  if (!options) {
     return undefined;
   }
 
-  return convertJsonSchemaToGrammar(
-    (responseFormat.schema ?? { type: "object" }) as JSONSchema7
-  );
+  const schema = options.jsonSchema ?? options.json_schema;
+  return isRecord(schema) ? (schema as JSONSchema7) : undefined;
+}
+
+function schemaFromJsonSchemaResponseFormat(
+  responseFormat: Record<string, unknown>,
+  fallbackSchema: JSONSchema7 | undefined
+): JSONSchema7 {
+  const wrapper = responseFormat.json_schema ?? responseFormat.jsonSchema;
+  if (isRecord(wrapper) && isRecord(wrapper.schema)) {
+    return wrapper.schema as JSONSchema7;
+  }
+  if (
+    isRecord(wrapper) &&
+    (wrapper.type !== undefined ||
+      wrapper.properties !== undefined ||
+      wrapper.items !== undefined ||
+      wrapper.enum !== undefined ||
+      wrapper.const !== undefined ||
+      wrapper.$ref !== undefined ||
+      wrapper.oneOf !== undefined ||
+      wrapper.anyOf !== undefined ||
+      wrapper.allOf !== undefined)
+  ) {
+    return wrapper as JSONSchema7;
+  }
+  return fallbackSchema ?? { type: "object" };
+}
+
+function resolveOpenAICompatibleResponseGrammar(options: {
+  responseFormat: unknown;
+  jsonSchema?: JSONSchema7;
+}): string | undefined {
+  if (!isRecord(options.responseFormat)) {
+    return options.jsonSchema
+      ? convertJsonSchemaToGrammar(options.jsonSchema)
+      : undefined;
+  }
+
+  switch (options.responseFormat.type) {
+    case undefined:
+    case "text":
+      return options.jsonSchema
+        ? convertJsonSchemaToGrammar(options.jsonSchema)
+        : undefined;
+    case "json":
+      return convertJsonSchemaToGrammar(
+        (options.responseFormat.schema ?? { type: "object" }) as JSONSchema7
+      );
+    case "json_object":
+      return convertJsonSchemaToGrammar(
+        (options.responseFormat.schema ??
+          options.jsonSchema ?? { type: "object" }) as JSONSchema7
+      );
+    case "json_schema":
+      return convertJsonSchemaToGrammar(
+        schemaFromJsonSchemaResponseFormat(
+          options.responseFormat,
+          options.jsonSchema
+        )
+      );
+    default:
+      throw new Error(
+        `Unsupported llama.cpp responseFormat type: ${String(
+          options.responseFormat.type
+        )}`
+      );
+  }
+}
+
+function resolveResponseGrammar(
+  options: LanguageModelV4CallOptions
+): string | undefined {
+  const providerOptions = getLlamaCppProviderOptions(options);
+  const providerResponseFormat =
+    providerOptions?.responseFormat ?? providerOptions?.response_format;
+  const providerJsonSchema = getSchemaOption(providerOptions);
+  const providerRequestsStructuredOutput =
+    providerJsonSchema !== undefined ||
+    (isRecord(providerResponseFormat) &&
+      providerResponseFormat.type !== undefined &&
+      providerResponseFormat.type !== "text");
+
+  if (
+    providerRequestsStructuredOutput &&
+    isRecord(options.responseFormat) &&
+    options.responseFormat.type === "json"
+  ) {
+    throw new Error(
+      "AI SDK responseFormat and llama.cpp providerOptions.responseFormat cannot both request structured output."
+    );
+  }
+
+  return resolveOpenAICompatibleResponseGrammar({
+    responseFormat: providerResponseFormat ?? options.responseFormat,
+    jsonSchema: providerJsonSchema,
+  });
 }
 
 /**
@@ -1302,7 +1407,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   ): Promise<LanguageModelV4GenerateResult> {
     throwIfAborted(options.abortSignal);
     const handle = await this.ensureModelLoaded();
-    const responseGrammar = resolveResponseGrammar(options.responseFormat);
+    const responseGrammar = resolveResponseGrammar(options);
 
     // Extract function tools from the tools array
     const functionTools =
@@ -1444,7 +1549,7 @@ export class LlamaCppLanguageModel implements LanguageModelV4 {
   ): Promise<LanguageModelV4StreamResult> {
     throwIfAborted(options.abortSignal);
     const handle = await this.ensureModelLoaded();
-    const responseGrammar = resolveResponseGrammar(options.responseFormat);
+    const responseGrammar = resolveResponseGrammar(options);
 
     // Extract function tools from the tools array
     const functionTools =

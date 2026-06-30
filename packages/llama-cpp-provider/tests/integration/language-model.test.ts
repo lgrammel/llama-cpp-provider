@@ -637,6 +637,159 @@ describe("LlamaCppLanguageModel Integration", () => {
         })
       );
     });
+
+    it("supports OpenAI-compatible json_object response format from provider options", async () => {
+      await model.doGenerate({
+        prompt: testMessages,
+        providerOptions: {
+          "llama.cpp": {
+            responseFormat: {
+              type: "json_object",
+            },
+          },
+        },
+      });
+
+      expect(nativeBinding.generate).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          grammar: expect.stringContaining("root ::= object"),
+        })
+      );
+    });
+
+    it("supports OpenAI-compatible json_object response format with schema", async () => {
+      await model.doGenerate({
+        prompt: testMessages,
+        providerOptions: {
+          "llama.cpp": {
+            responseFormat: {
+              type: "json_object",
+              schema: {
+                type: "object",
+                properties: {
+                  answer: { type: "string" },
+                },
+                required: ["answer"],
+              },
+            },
+          },
+        },
+      });
+
+      expect(nativeBinding.generate).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          grammar: expect.stringContaining("answer"),
+        })
+      );
+    });
+
+    it("supports OpenAI-compatible json_schema response format from provider options", async () => {
+      await model.doGenerate({
+        prompt: testMessages,
+        providerOptions: {
+          "llama.cpp": {
+            responseFormat: {
+              type: "json_schema",
+              json_schema: {
+                name: "answer",
+                schema: {
+                  type: "object",
+                  properties: {
+                    value: { type: "number" },
+                  },
+                  required: ["value"],
+                },
+              },
+            },
+          },
+        },
+      });
+
+      expect(nativeBinding.generate).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          grammar: expect.stringContaining("value"),
+        })
+      );
+    });
+
+    it("supports server-style response_format provider option spelling", async () => {
+      await model.doGenerate({
+        prompt: testMessages,
+        providerOptions: {
+          "llama.cpp": {
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                schema: {
+                  type: "object",
+                  properties: {
+                    label: { type: "string" },
+                  },
+                  required: ["label"],
+                },
+              },
+            },
+          },
+        },
+      });
+
+      expect(nativeBinding.generate).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          grammar: expect.stringContaining("label"),
+        })
+      );
+    });
+
+    it("supports llama.cpp top-level json_schema provider option", async () => {
+      await model.doGenerate({
+        prompt: testMessages,
+        providerOptions: {
+          "llama.cpp": {
+            json_schema: {
+              type: "object",
+              properties: {
+                status: { enum: ["ok"] },
+              },
+              required: ["status"],
+            },
+          },
+        },
+      });
+
+      expect(nativeBinding.generate).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          grammar: expect.stringContaining("status"),
+        })
+      );
+    });
+
+    it("rejects duplicate AI SDK and llama.cpp structured output settings", async () => {
+      await expect(
+        model.doGenerate({
+          prompt: testMessages,
+          responseFormat: {
+            type: "json",
+          },
+          providerOptions: {
+            "llama.cpp": {
+              responseFormat: {
+                type: "json_schema",
+                json_schema: {
+                  schema: { type: "object" },
+                },
+              },
+            },
+          },
+        })
+      ).rejects.toThrow(
+        "AI SDK responseFormat and llama.cpp providerOptions.responseFormat cannot both request structured output."
+      );
+    });
   });
 
   describe("doStream", () => {

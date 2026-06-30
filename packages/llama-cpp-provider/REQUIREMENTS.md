@@ -85,6 +85,12 @@ These requirements describe the current `@lgrammel/llama-cpp-provider` behavior 
 
 - JSON response formats with schemas must be converted to GBNF grammar and passed to native generation.
 - JSON response formats without schemas must be constrained to a JSON object grammar.
+- OpenAI-compatible `providerOptions["llama.cpp"].responseFormat.type: "json_object"` must be constrained to a JSON object grammar when no schema is provided.
+- OpenAI-compatible `providerOptions["llama.cpp"].responseFormat.type: "json_object"` must use its `schema` field when provided.
+- OpenAI-compatible `providerOptions["llama.cpp"].responseFormat.type: "json_schema"` must use the nested `json_schema.schema` or `jsonSchema.schema` field when provided.
+- `providerOptions["llama.cpp"].response_format` must be accepted as the server-style alias for `providerOptions["llama.cpp"].responseFormat`.
+- `providerOptions["llama.cpp"].json_schema` and `providerOptions["llama.cpp"].jsonSchema` must be accepted as llama.cpp-style top-level JSON schema aliases.
+- AI SDK `responseFormat` and llama.cpp provider structured-output options must reject when both request structured output in the same call.
 - Structured output grammar must disable reasoning extraction for that call.
 - The JSON schema converter must support clear schema features used by the code: primitives, objects, arrays, enums, constants, `$ref`, `oneOf`, `anyOf`, `allOf`, string formats, string patterns, and numeric bounds.
 - Remote schema fetching must not be required or supported.
