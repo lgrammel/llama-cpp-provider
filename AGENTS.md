@@ -19,6 +19,7 @@ This file provides guidance for AI coding agents (Cursor, Copilot, Claude Code) 
 | Build TypeScript only | `pnpm build:ts` |
 | Build native only | `pnpm build:native` |
 | Check formatting | `pnpm format:check` |
+| Add changeset | `pnpm changeset` |
 | Run all tests once | `pnpm test:run` |
 | Run unit tests | `pnpm test:unit` |
 | Run integration tests | `pnpm test:integration` |
@@ -331,6 +332,10 @@ pnpm changeset
 ```
 
 Use `pnpm changeset` after user-facing package changes. Select the changed package, choose the semver bump (`patch` for fixes, `minor` for backwards-compatible features, `major` for breaking changes), and write a short summary focused on the release note.
+
+Add a changeset before handoff for any change that affects published package behavior, public APIs, runtime dependencies, examples intended for users, installation/build behavior, or documented requirements. Do not add a changeset for tests-only changes, internal refactors with no observable behavior change, formatting-only changes, or repository-agent guidance unless they accompany a package-facing change.
+
+When adding changesets after several commits have already landed, inspect `git log` since the latest release tag and group related commits into release-note-level changes rather than writing one changeset per commit.
 
 ### Adding a New Feature
 
