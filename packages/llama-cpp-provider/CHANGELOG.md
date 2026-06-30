@@ -1,5 +1,12 @@
 # @lgrammel/llama-cpp-provider
 
+## 0.4.1
+
+### Patch Changes
+
+- d0a6b5c: Fix structured output generation with grammar-constrained native sampling.
+- 9f617a8: Fix Qwen 3.6 preset formatting and parse XML-style tool calls emitted by local agent models.
+
 ## 0.4.0
 
 ### Minor Changes
