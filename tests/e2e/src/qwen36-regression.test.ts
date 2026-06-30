@@ -80,4 +80,43 @@ describeQwen36E2E("Qwen 3.6 E2E regressions", () => {
       expect(serializedSteps).not.toContain("<sandboxshell:cmd>");
     }
   );
+
+  it(
+    "reuses prefix cache after a tool result turn",
+    { timeout: 180000 },
+    async () => {
+      const result = await generateText({
+        model,
+        prompt:
+          "Use the sandboxshell tool to check whether ffmpeg is installed. " +
+          "Call it with cmd exactly: which ffmpeg && ffmpeg -version",
+        maxOutputTokens: 192,
+        temperature: 0,
+        stopWhen: stepCountIs(2),
+        tools: {
+          sandboxshell: tool({
+            description: "Run a shell command in the sandbox.",
+            inputSchema: z.object({ cmd: z.string() }),
+            execute: async () => "/usr/local/bin/ffmpeg\nffmpeg version n7.1",
+          }),
+        },
+      });
+
+      expect(result.steps).toHaveLength(2);
+      expect(result.steps[0].toolResults).toHaveLength(1);
+      expect(result.steps[1].toolResults).toHaveLength(1);
+
+      const firstUsage = result.steps[0].usage;
+      const secondUsage = result.steps[1].usage;
+
+      expect(firstUsage.inputTokenDetails?.cacheReadTokens).toBe(0);
+      expect(secondUsage.inputTokenDetails?.cacheReadTokens).toBeGreaterThan(0);
+      expect(secondUsage.inputTokenDetails?.cacheWriteTokens).toBeGreaterThan(
+        0
+      );
+      expect(secondUsage.inputTokenDetails?.cacheWriteTokens).toBeLessThan(
+        secondUsage.inputTokens
+      );
+    }
+  );
 });

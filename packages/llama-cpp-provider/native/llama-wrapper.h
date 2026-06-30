@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -194,13 +195,21 @@ private:
                       GenerationParams &effective_params, common_chat_parser_params &parser_params,
                       bool &parse_tool_calls);
   bool ensure_chat_templates(GenerationResult &result);
+  bool apply_common_chat_template(const std::vector<common_chat_msg> &messages,
+                                  const GenerationParams &params, bool add_generation_prompt,
+                                  common_chat_params &chat_params, GenerationResult &result);
   std::vector<common_chat_msg>
   to_common_chat_messages(const std::vector<ChatMessage> &messages) const;
   std::vector<common_chat_tool>
   to_common_chat_tools(const std::vector<ToolDefinition> &tools) const;
-  void parse_generated_message(GenerationResult &result,
-                               const common_chat_parser_params &parser_params,
-                               bool parse_tool_calls) const;
+  std::optional<common_chat_msg>
+  parse_generated_message(GenerationResult &result, const common_chat_parser_params &parser_params,
+                          bool parse_tool_calls) const;
+  std::string
+  prompt_cache_text_after_generation(const std::vector<ChatMessage> &messages,
+                                     const GenerationParams &params, const std::string &prompt,
+                                     const std::string &generated_text,
+                                     const std::optional<common_chat_msg> &parsed_message);
 };
 
 } // namespace llama_wrapper

@@ -4,6 +4,7 @@
 #include "mtmd.h"
 #include "reasoning-budget.h"
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -353,6 +354,36 @@ bool LlamaModel::ensure_chat_templates(GenerationResult &result) {
   }
 }
 
+static common_chat_tool_choice parse_tool_choice(const std::string &tool_choice);
+
+bool LlamaModel::apply_common_chat_template(const std::vector<common_chat_msg> &messages,
+                                            const GenerationParams &params,
+                                            bool add_generation_prompt,
+                                            common_chat_params &chat_params,
+                                            GenerationResult &result) {
+  if (!ensure_chat_templates(result)) {
+    return false;
+  }
+
+  common_chat_templates_inputs inputs;
+  inputs.messages = messages;
+  inputs.tools = to_common_chat_tools(params.tools);
+  inputs.tool_choice = parse_tool_choice(params.tool_choice);
+  inputs.parallel_tool_calls = params.parallel_tool_calls;
+  inputs.use_jinja = true;
+  inputs.add_generation_prompt = add_generation_prompt;
+  inputs.reasoning_format = COMMON_REASONING_FORMAT_NONE;
+  inputs.enable_thinking = params.enable_thinking;
+
+  try {
+    chat_params = common_chat_templates_apply(chat_templates_.get(), inputs);
+    return !chat_params.prompt.empty();
+  } catch (const std::exception &e) {
+    result.error_message = std::string("Failed to apply llama.cpp chat template: ") + e.what();
+    return false;
+  }
+}
+
 std::vector<common_chat_msg>
 LlamaModel::to_common_chat_messages(const std::vector<ChatMessage> &messages) const {
   std::vector<common_chat_msg> result;
@@ -401,6 +432,271 @@ static bool has_reached_predict_limit(int decoded_tokens, int max_tokens) {
   return max_tokens >= 0 && decoded_tokens >= max_tokens;
 }
 
+static std::string trim_copy(const std::string &text) {
+  size_t start = 0;
+  while (start < text.size() && std::isspace(static_cast<unsigned char>(text[start])) != 0) {
+    start++;
+  }
+
+  size_t end = text.size();
+  while (end > start && std::isspace(static_cast<unsigned char>(text[end - 1])) != 0) {
+    end--;
+  }
+
+  return text.substr(start, end - start);
+}
+
+static std::string json_escape(const std::string &text) {
+  std::string escaped;
+  for (const char ch : text) {
+    switch (ch) {
+    case '"':
+      escaped += "\\\"";
+      break;
+    case '\\':
+      escaped += "\\\\";
+      break;
+    case '\b':
+      escaped += "\\b";
+      break;
+    case '\f':
+      escaped += "\\f";
+      break;
+    case '\n':
+      escaped += "\\n";
+      break;
+    case '\r':
+      escaped += "\\r";
+      break;
+    case '\t':
+      escaped += "\\t";
+      break;
+    default:
+      escaped += ch;
+      break;
+    }
+  }
+  return escaped;
+}
+
+static bool is_tool_identifier(const std::string &name) {
+  if (name.empty()) {
+    return false;
+  }
+
+  const unsigned char first = static_cast<unsigned char>(name[0]);
+  if (std::isalpha(first) == 0 && name[0] != '_') {
+    return false;
+  }
+
+  for (const char ch : name) {
+    const unsigned char c = static_cast<unsigned char>(ch);
+    if (std::isalnum(c) == 0 && ch != '_' && ch != '-' && ch != '.') {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+static std::string
+make_json_arguments(const std::vector<std::pair<std::string, std::string>> &arguments) {
+  std::string json = "{";
+  for (size_t i = 0; i < arguments.size(); i++) {
+    if (i > 0) {
+      json += ",";
+    }
+    json +=
+        "\"" + json_escape(arguments[i].first) + "\":\"" + json_escape(arguments[i].second) + "\"";
+  }
+  json += "}";
+  return json;
+}
+
+static void remove_ranges(std::string &text, const std::vector<std::pair<size_t, size_t>> &ranges) {
+  for (auto it = ranges.rbegin(); it != ranges.rend(); ++it) {
+    text.erase(it->first, it->second - it->first);
+  }
+}
+
+static std::string strip_generated_control_tokens(std::string text) {
+  const std::string assistant_header = "<|im_start|>assistant";
+  std::string trimmed = trim_copy(text);
+  while (trimmed.rfind(assistant_header, 0) == 0) {
+    trimmed = trim_copy(trimmed.substr(assistant_header.size()));
+  }
+
+  const std::string assistant_end = "<|im_end|>";
+  while (trimmed.size() >= assistant_end.size() &&
+         trimmed.compare(trimmed.size() - assistant_end.size(), assistant_end.size(),
+                         assistant_end) == 0) {
+    trimmed = trim_copy(trimmed.substr(0, trimmed.size() - assistant_end.size()));
+  }
+
+  return trimmed;
+}
+
+static std::string
+strip_xml_tool_call_markup(const std::string &text,
+                           const std::vector<std::pair<size_t, size_t>> &tool_call_ranges) {
+  std::string stripped = text;
+  remove_ranges(stripped, tool_call_ranges);
+  stripped = strip_generated_control_tokens(std::move(stripped));
+
+  const std::string empty_think = "<think>\n\n</think>";
+  size_t empty_think_pos = stripped.find(empty_think);
+  while (empty_think_pos != std::string::npos) {
+    stripped.erase(empty_think_pos, empty_think.size());
+    empty_think_pos = stripped.find(empty_think);
+  }
+
+  const size_t dangling_think = stripped.find("<think>");
+  if (dangling_think != std::string::npos &&
+      stripped.find("</think>", dangling_think) == std::string::npos) {
+    stripped.erase(dangling_think);
+  }
+
+  return trim_copy(stripped);
+}
+
+static std::vector<std::pair<std::string, std::string>>
+parse_xml_parameters(const std::string &text) {
+  std::vector<std::pair<std::string, std::string>> arguments;
+  size_t search_pos = 0;
+
+  while (true) {
+    const size_t parameter_start = text.find("<parameter=", search_pos);
+    if (parameter_start == std::string::npos) {
+      break;
+    }
+
+    const size_t name_start = parameter_start + std::string("<parameter=").size();
+    const size_t name_end = text.find('>', name_start);
+    if (name_end == std::string::npos) {
+      break;
+    }
+
+    const std::string name = text.substr(name_start, name_end - name_start);
+    const size_t value_start = name_end + 1;
+    const size_t value_end = text.find("</parameter>", value_start);
+    if (value_end == std::string::npos) {
+      break;
+    }
+
+    if (is_tool_identifier(name)) {
+      arguments.push_back({name, trim_copy(text.substr(value_start, value_end - value_start))});
+    }
+    search_pos = value_end + std::string("</parameter>").size();
+  }
+
+  return arguments;
+}
+
+static common_chat_msg parse_xml_tool_calls_fallback(const std::string &text) {
+  common_chat_msg msg;
+  std::vector<std::pair<size_t, size_t>> tool_call_ranges;
+  size_t search_pos = 0;
+
+  while (true) {
+    const size_t tool_call_start = text.find("<tool_call>", search_pos);
+    if (tool_call_start == std::string::npos) {
+      break;
+    }
+
+    const size_t function_start = text.find("<function=", tool_call_start);
+    if (function_start == std::string::npos) {
+      search_pos = tool_call_start + std::string("<tool_call>").size();
+      continue;
+    }
+
+    const size_t name_start = function_start + std::string("<function=").size();
+    const size_t name_end = text.find('>', name_start);
+    if (name_end == std::string::npos) {
+      break;
+    }
+
+    const std::string name = text.substr(name_start, name_end - name_start);
+    const size_t function_body_start = name_end + 1;
+    const size_t function_end = text.find("</function>", function_body_start);
+    if (function_end == std::string::npos) {
+      break;
+    }
+
+    const size_t tool_call_end = text.find("</tool_call>", function_end);
+    if (tool_call_end == std::string::npos) {
+      break;
+    }
+
+    const std::string parameters_text =
+        text.substr(function_body_start, function_end - function_body_start);
+    const std::vector<std::pair<std::string, std::string>> arguments =
+        parse_xml_parameters(parameters_text);
+    if (is_tool_identifier(name) && !arguments.empty()) {
+      msg.tool_calls.push_back({
+          /* .name = */ name,
+          /* .arguments = */ make_json_arguments(arguments),
+          /* .id = */ "",
+      });
+      tool_call_ranges.push_back(
+          {tool_call_start, tool_call_end + std::string("</tool_call>").size()});
+    }
+
+    search_pos = tool_call_end + std::string("</tool_call>").size();
+  }
+
+  search_pos = 0;
+  while (true) {
+    const size_t tag_start = text.find('<', search_pos);
+    if (tag_start == std::string::npos) {
+      break;
+    }
+    if (text.compare(tag_start, std::string("<tool_call>").size(), "<tool_call>") == 0 ||
+        text.compare(tag_start, std::string("</").size(), "</") == 0 ||
+        text.compare(tag_start, std::string("<|").size(), "<|") == 0) {
+      search_pos = tag_start + 1;
+      continue;
+    }
+
+    const size_t separator = text.find(':', tag_start + 1);
+    const size_t tag_end = text.find('>', tag_start + 1);
+    if (separator == std::string::npos || tag_end == std::string::npos || separator > tag_end) {
+      search_pos = tag_start + 1;
+      continue;
+    }
+
+    const std::string tool_name = text.substr(tag_start + 1, separator - tag_start - 1);
+    const std::string argument_name = text.substr(separator + 1, tag_end - separator - 1);
+    if (!is_tool_identifier(tool_name) || !is_tool_identifier(argument_name)) {
+      search_pos = tag_end + 1;
+      continue;
+    }
+
+    const std::string closing_tag = "</" + tool_name + ":" + argument_name + ">";
+    const size_t value_start = tag_end + 1;
+    const size_t value_end = text.find(closing_tag, value_start);
+    if (value_end == std::string::npos) {
+      search_pos = tag_end + 1;
+      continue;
+    }
+
+    msg.tool_calls.push_back({
+        /* .name = */ tool_name,
+        /* .arguments = */
+        make_json_arguments(
+            {{argument_name, trim_copy(text.substr(value_start, value_end - value_start))}}),
+        /* .id = */ "",
+    });
+    tool_call_ranges.push_back({tag_start, value_end + closing_tag.size()});
+    search_pos = value_end + closing_tag.size();
+  }
+
+  if (!msg.tool_calls.empty()) {
+    msg.content = strip_xml_tool_call_markup(text, tool_call_ranges);
+  }
+
+  return msg;
+}
+
 bool LlamaModel::prepare_prompt(const std::vector<ChatMessage> &messages,
                                 const GenerationParams &params, GenerationResult &result,
                                 std::string &prompt, GenerationParams &effective_params,
@@ -431,46 +727,31 @@ bool LlamaModel::prepare_prompt(const std::vector<ChatMessage> &messages,
     return false;
   }
 
-  common_chat_templates_inputs inputs;
-  inputs.messages = common_messages;
-  inputs.tools = to_common_chat_tools(params.tools);
-  inputs.tool_choice = parse_tool_choice(params.tool_choice);
-  inputs.parallel_tool_calls = params.parallel_tool_calls;
-  inputs.use_jinja = true;
-  inputs.add_generation_prompt = true;
-  inputs.reasoning_format = COMMON_REASONING_FORMAT_NONE;
-  inputs.enable_thinking = params.enable_thinking;
-
-  try {
-    common_chat_params chat_params = common_chat_templates_apply(chat_templates_.get(), inputs);
-    prompt = chat_params.prompt;
-    effective_params.grammar = chat_params.grammar;
-    effective_params.stop_sequences.insert(effective_params.stop_sequences.end(),
-                                           chat_params.additional_stops.begin(),
-                                           chat_params.additional_stops.end());
-    parser_params = common_chat_parser_params(chat_params);
-    parser_params.parse_tool_calls = true;
-    parse_tool_calls = true;
-    return !prompt.empty();
-  } catch (const std::exception &e) {
-    result.error_message = std::string("Failed to apply llama.cpp chat template: ") + e.what();
+  common_chat_params chat_params;
+  if (!apply_common_chat_template(common_messages, params, true, chat_params, result)) {
     return false;
   }
+
+  prompt = chat_params.prompt;
+  effective_params.grammar = chat_params.grammar;
+  effective_params.stop_sequences.insert(effective_params.stop_sequences.end(),
+                                         chat_params.additional_stops.begin(),
+                                         chat_params.additional_stops.end());
+  parser_params = common_chat_parser_params(chat_params);
+  parser_params.parse_tool_calls = true;
+  parse_tool_calls = true;
+  return true;
 }
 
-void LlamaModel::parse_generated_message(GenerationResult &result,
-                                         const common_chat_parser_params &parser_params,
-                                         bool parse_tool_calls) const {
+std::optional<common_chat_msg>
+LlamaModel::parse_generated_message(GenerationResult &result,
+                                    const common_chat_parser_params &parser_params,
+                                    bool parse_tool_calls) const {
   if (!parse_tool_calls || result.finish_reason == "error") {
-    return;
+    return std::nullopt;
   }
 
-  try {
-    common_chat_msg msg = common_chat_parse(result.text, false, parser_params);
-    if (msg.empty()) {
-      return;
-    }
-
+  auto apply_message = [&result](const common_chat_msg &msg) {
     result.text = msg.render_content();
     result.tool_calls.clear();
     result.tool_calls.reserve(msg.tool_calls.size());
@@ -481,10 +762,56 @@ void LlamaModel::parse_generated_message(GenerationResult &result,
           /* .arguments = */ tool_call.arguments,
       });
     }
+  };
+
+  try {
+    common_chat_msg msg = common_chat_parse(result.text, false, parser_params);
+    if (!msg.empty()) {
+      if (msg.tool_calls.empty()) {
+        common_chat_msg fallback_msg = parse_xml_tool_calls_fallback(result.text);
+        if (!fallback_msg.empty()) {
+          apply_message(fallback_msg);
+          return fallback_msg;
+        }
+      }
+
+      apply_message(msg);
+      return msg;
+    }
   } catch (const std::exception &) {
     // If the native parser cannot parse a model response, keep the raw text so
     // TypeScript can still fall back to the legacy JSON parser.
   }
+
+  common_chat_msg fallback_msg = parse_xml_tool_calls_fallback(result.text);
+  if (fallback_msg.empty()) {
+    return std::nullopt;
+  }
+
+  apply_message(fallback_msg);
+  return fallback_msg;
+}
+
+std::string LlamaModel::prompt_cache_text_after_generation(
+    const std::vector<ChatMessage> &messages, const GenerationParams &params,
+    const std::string &prompt, const std::string &generated_text,
+    const std::optional<common_chat_msg> &parsed_message) {
+  if (!parsed_message.has_value() || parsed_message->tool_calls.empty()) {
+    return prompt + generated_text;
+  }
+
+  std::vector<common_chat_msg> common_messages = to_common_chat_messages(messages);
+  common_chat_msg assistant_message = *parsed_message;
+  assistant_message.role = "assistant";
+  common_messages.push_back(std::move(assistant_message));
+
+  GenerationResult render_result;
+  common_chat_params chat_params;
+  if (!apply_common_chat_template(common_messages, params, false, chat_params, render_result)) {
+    return prompt + generated_text;
+  }
+
+  return chat_params.prompt;
 }
 
 void LlamaModel::create_sampler(const GenerationParams &params) {
@@ -942,12 +1269,6 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
     n_cur++;
   }
 
-  if (!effective_params.prompt_cache) {
-    cached_tokens_.clear();
-  } else {
-    sync_cached_tokens_to_text(prompt + generated_text);
-  }
-
   if (result.error_message == "Generation aborted") {
     cached_tokens_.clear();
   } else if (effective_params.max_tokens >= 0 && result.finish_reason == "error" &&
@@ -958,7 +1279,16 @@ GenerationResult LlamaModel::generate(const std::vector<ChatMessage> &messages,
   }
 
   result.text = generated_text;
-  parse_generated_message(result, parser_params, parse_tool_calls);
+  const std::optional<common_chat_msg> parsed_message =
+      parse_generated_message(result, parser_params, parse_tool_calls);
+
+  if (!effective_params.prompt_cache) {
+    cached_tokens_.clear();
+  } else if (result.error_message != "Generation aborted") {
+    sync_cached_tokens_to_text(prompt_cache_text_after_generation(messages, params, prompt,
+                                                                  generated_text, parsed_message));
+  }
+
   return result;
 }
 
@@ -1106,12 +1436,6 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
     }
   }
 
-  if (!effective_params.prompt_cache) {
-    cached_tokens_.clear();
-  } else {
-    sync_cached_tokens_to_text(prompt + generated_text);
-  }
-
   if (result.error_message == "Generation aborted") {
     cached_tokens_.clear();
   } else if (effective_params.max_tokens >= 0 && result.finish_reason == "error" &&
@@ -1122,7 +1446,16 @@ GenerationResult LlamaModel::generate_streaming(const std::vector<ChatMessage> &
   }
 
   result.text = generated_text;
-  parse_generated_message(result, parser_params, parse_tool_calls);
+  const std::optional<common_chat_msg> parsed_message =
+      parse_generated_message(result, parser_params, parse_tool_calls);
+
+  if (!effective_params.prompt_cache) {
+    cached_tokens_.clear();
+  } else if (result.error_message != "Generation aborted") {
+    sync_cached_tokens_to_text(prompt_cache_text_after_generation(messages, params, prompt,
+                                                                  generated_text, parsed_message));
+  }
+
   return result;
 }
 
