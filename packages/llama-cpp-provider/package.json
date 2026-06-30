@@ -1,6 +1,6 @@
 {
   "name": "@lgrammel/llama-cpp-provider",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "A minimal llama.cpp provider for the Vercel AI SDK implementing LanguageModelV4 and EmbeddingModelV4",
   "type": "module",
   "main": "./dist/index.js",

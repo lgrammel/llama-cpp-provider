@@ -1,5 +1,11 @@
 # @lgrammel/llama-cpp-provider
 
+## 0.4.3
+
+### Patch Changes
+
+- 0518d0f: Fix prefix prompt-cache reuse after Qwen XML tool-call turns.
+
 ## 0.4.2
 
 ### Patch Changes
