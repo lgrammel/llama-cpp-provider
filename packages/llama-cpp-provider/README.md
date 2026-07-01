@@ -2,6 +2,8 @@
 
 > **Alpha software**: this package is in early development. APIs may change between versions.
 
+> **Experimental project**: this provider was built as an experiment. For most use cases, I recommend running the [llama.cpp server](https://github.com/ggerganov/llama.cpp/tree/master/tools/server) and connecting to it with the AI SDK OpenAI-compatible provider instead.
+
 > **macOS only**: Apple Silicon and Intel Macs are supported. Windows and Linux are not currently supported.
 
 A [llama.cpp](https://github.com/ggerganov/llama.cpp) provider for the [Vercel AI SDK](https://sdk.vercel.ai/). It runs local GGUF models inside Node.js through native C++ bindings, without a separate inference server.
